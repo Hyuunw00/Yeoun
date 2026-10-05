@@ -13,6 +13,8 @@ export type WorkInput = {
   year: string | null;
   releaseDate: string | null;
   imageUrl: string | null;
+  // Music release format; left as is when omitted
+  format?: string | null;
 };
 
 export type Quote = {
@@ -26,6 +28,8 @@ export type RecordInput = {
   experiencedOn: string;
   episode: string | null;
   rating: number | null;
+  track?: string | null;
+  moment?: string | null;
 };
 
 // Each entry upgrades the schema to version (index + 1). Append only; never edit a shipped step.
@@ -77,6 +81,11 @@ const MIGRATIONS = [
   // Wide still and credits (JSON) fetched once for the theater screen
   `ALTER TABLE works ADD COLUMN backdrop_url TEXT;
    ALTER TABLE works ADD COLUMN credits TEXT;`,
+  // Music: the track that stuck, and where / in what moment it was heard
+  `ALTER TABLE records ADD COLUMN track TEXT;
+   ALTER TABLE records ADD COLUMN moment TEXT;`,
+  // Music release format (single / ep / album)
+  'ALTER TABLE works ADD COLUMN format TEXT',
 ];
 
 export async function migrate(db: SQLiteDatabase) {
@@ -101,14 +110,15 @@ export async function migrate(db: SQLiteDatabase) {
 // Returns the existing work id when the same work was recorded before
 async function upsertWork(db: SQLiteDatabase, work: WorkInput) {
   await db.runAsync(
-    `INSERT INTO works (category, external_id, title, subtitle, year, release_date, image_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO works (category, external_id, title, subtitle, year, release_date, image_url, format)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (category, external_id) DO UPDATE SET
        title = excluded.title,
        subtitle = excluded.subtitle,
        year = excluded.year,
        release_date = excluded.release_date,
-       image_url = excluded.image_url`,
+       image_url = excluded.image_url,
+       format = COALESCE(excluded.format, works.format)`,
     work.category,
     work.externalId,
     work.title,
@@ -116,6 +126,7 @@ async function upsertWork(db: SQLiteDatabase, work: WorkInput) {
     work.year,
     work.releaseDate,
     work.imageUrl,
+    work.format ?? null,
   );
   const row = await db.getFirstAsync<{ id: number }>(
     'SELECT id FROM works WHERE category = ? AND external_id = ?',
@@ -169,12 +180,15 @@ export async function saveRecord(
   await db.withTransactionAsync(async () => {
     const workId = await upsertWork(db, work);
     const result = await db.runAsync(
-      'INSERT INTO records (work_id, body, experienced_on, episode, rating) VALUES (?, ?, ?, ?, ?)',
+      `INSERT INTO records (work_id, body, experienced_on, episode, rating, track, moment)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       workId,
       record.body,
       record.experiencedOn,
       record.episode,
       record.rating,
+      record.track ?? null,
+      record.moment ?? null,
     );
     await insertPhotos(db, result.lastInsertRowId, photos);
     await insertQuotes(db, result.lastInsertRowId, quotes);
@@ -194,6 +208,8 @@ export type Work = {
   backdropUrl: string | null;
   // JSON-encoded credits; null until fetched
   credits: string | null;
+  // Music only: 'single' | 'ep' | 'album'; null until known
+  format: string | null;
 };
 
 export type WorkSummary = Work & {
@@ -207,6 +223,8 @@ export type RecordEntry = {
   experiencedOn: string;
   episode: string | null;
   rating: number | null;
+  track: string | null;
+  moment: string | null;
   createdAt: string;
   photos: string[];
   quotes: Quote[];
@@ -214,7 +232,8 @@ export type RecordEntry = {
 
 type RecordRow = Omit<RecordEntry, 'photos' | 'quotes'>;
 
-const RECORD_COLUMNS = `id, body, experienced_on AS experiencedOn, episode, rating, created_at AS createdAt`;
+const RECORD_COLUMNS = `id, body, experienced_on AS experiencedOn, episode, rating, track, moment,
+  created_at AS createdAt`;
 
 async function attachPhotos(db: SQLiteDatabase, rows: RecordRow[]): Promise<RecordEntry[]> {
   if (rows.length === 0) return [];
@@ -241,7 +260,7 @@ async function attachPhotos(db: SQLiteDatabase, rows: RecordRow[]): Promise<Reco
 
 const WORK_COLUMNS = `w.id, w.category, w.external_id AS externalId, w.title, w.subtitle,
   w.year, w.release_date AS releaseDate, w.image_url AS imageUrl,
-  w.backdrop_url AS backdropUrl, w.credits`;
+  w.backdrop_url AS backdropUrl, w.credits, w.format`;
 
 // Most recently experienced first. `query` matches titles, record bodies and quotes.
 export function listWorks(db: SQLiteDatabase, category: Category, query = '') {
@@ -303,6 +322,11 @@ export async function setWorkDetails(
   emitDataChanged();
 }
 
+export async function setWorkFormat(db: SQLiteDatabase, workId: number, format: string) {
+  await db.runAsync('UPDATE works SET format = ? WHERE id = ?', format, workId);
+  emitDataChanged();
+}
+
 export async function getRecord(db: SQLiteDatabase, id: number) {
   const row = await db.getFirstAsync<RecordRow>(`SELECT ${RECORD_COLUMNS} FROM records WHERE id = ?`, id);
   if (!row) return null;
@@ -322,12 +346,15 @@ export async function updateRecord(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE records
-       SET body = ?, experienced_on = ?, episode = ?, rating = ?, updated_at = datetime('now')
+       SET body = ?, experienced_on = ?, episode = ?, rating = ?, track = ?, moment = ?,
+           updated_at = datetime('now')
        WHERE id = ?`,
       record.body,
       record.experiencedOn,
       record.episode,
       record.rating,
+      record.track ?? null,
+      record.moment ?? null,
       id,
     );
     await db.runAsync('DELETE FROM record_photos WHERE record_id = ?', id);

@@ -34,6 +34,8 @@ type Options = {
   newWork: WorkInput | null;
   // Whether this category records underlined quotes
   withQuotes?: boolean;
+  // Prefill for a new record, e.g. the song picked in music search
+  initialTrack?: string | null;
   // Where to go after saving / deleting
   onSaved: (isEdit: boolean) => void;
   onWorkRemoved: () => void;
@@ -48,6 +50,7 @@ export function useRecordEditor({
   workId,
   newWork,
   withQuotes = false,
+  initialTrack,
   onSaved,
   onWorkRemoved,
 }: Options) {
@@ -61,6 +64,8 @@ export function useRecordEditor({
   const [experiencedOn, setExperiencedOn] = useState(() => toDateString(new Date()));
   const [episode, setEpisode] = useState('');
   const [rating, setRating] = useState<number | null>(null);
+  const [track, setTrack] = useState(initialTrack ?? '');
+  const [moment, setMoment] = useState('');
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [picking, setPicking] = useState(false);
@@ -84,6 +89,8 @@ export function useRecordEditor({
           setExperiencedOn(record.experiencedOn);
           setEpisode(record.episode ?? '');
           setRating(record.rating);
+          setTrack(record.track ?? '');
+          setMoment(record.moment ?? '');
           setQuotes(record.quotes);
           setPhotos(record.photos.map((fileName) => ({ uri: photoUri(fileName), fileName })));
           setRecordLoaded(true);
@@ -100,6 +107,8 @@ export function useRecordEditor({
         setExperiencedOn(draft.experiencedOn);
         setEpisode((prev) => prev || (draft.episode ?? ''));
         setRating((prev) => prev ?? draft.rating ?? null);
+        setTrack((prev) => prev || (draft.track ?? ''));
+        setMoment((prev) => prev || (draft.moment ?? ''));
         setQuotes((prev) => (prev.length ? prev : (draft.quotes ?? [])));
       })
       .finally(() => {
@@ -111,12 +120,15 @@ export function useRecordEditor({
   useEffect(() => {
     if (!draftReady.current) return;
     const timer = setTimeout(() => {
-      const hasContent = body.trim() || rating !== null || quotes.some((q) => q.quote.trim());
-      if (hasContent) saveDraft(category, externalId, { body, experiencedOn, episode, rating, quotes });
+      const hasContent =
+        body.trim() || rating !== null || moment.trim() || quotes.some((q) => q.quote.trim());
+      if (hasContent) {
+        saveDraft(category, externalId, { body, experiencedOn, episode, rating, track, moment, quotes });
+      }
       else clearDraft(category, externalId);
     }, DRAFT_SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [category, externalId, body, experiencedOn, episode, rating, quotes]);
+  }, [category, externalId, body, experiencedOn, episode, rating, track, moment, quotes]);
 
   // A corrupted draft date would crash the native picker, so fall back to today
   const parsedDate = fromDateString(experiencedOn);
@@ -131,7 +143,14 @@ export function useRecordEditor({
     setSaving(true);
     const newlyPersisted: string[] = [];
     try {
-      const record = { body: body.trim(), experiencedOn, episode: episode.trim() || null, rating };
+      const record = {
+        body: body.trim(),
+        experiencedOn,
+        episode: episode.trim() || null,
+        rating,
+        track: track.trim() || null,
+        moment: moment.trim() || null,
+      };
       // Drop empty quote cards; trim optional fields to null
       const cleanQuotes = quotes
         .filter((q) => q.quote.trim())
@@ -211,6 +230,10 @@ export function useRecordEditor({
     setEpisode,
     rating,
     setRating,
+    track,
+    setTrack,
+    moment,
+    setMoment,
     quotes,
     setQuotes,
     photos,

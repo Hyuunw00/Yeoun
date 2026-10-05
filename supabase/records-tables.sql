@@ -15,8 +15,12 @@ create table if not exists public.works (
   release_date text,
   backdrop_url text,
   credits text,
+  format text,
   primary key (user_id, id)
 );
+
+-- Added later: music release format (single / ep / album)
+alter table public.works add column if not exists format text;
 
 create table if not exists public.records (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -28,8 +32,14 @@ create table if not exists public.records (
   updated_at text not null,
   episode text,
   rating real,
+  track text,
+  moment text,
   primary key (user_id, id)
 );
+
+-- Added after the first version: music track and listening moment
+alter table public.records add column if not exists track text;
+alter table public.records add column if not exists moment text;
 
 create table if not exists public.record_photos (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,

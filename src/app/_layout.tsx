@@ -57,6 +57,8 @@ export default function RootLayout() {
         <Stack.Screen name="movie/work/[id]" options={{ animation: 'fade' }} />
         {/* Fade in as the book comes off the shelf and opens */}
         <Stack.Screen name="book/work/[id]" options={{ animation: 'fade' }} />
+        {/* Fade in as the record comes out of its sleeve */}
+        <Stack.Screen name="music/work/[id]" options={{ animation: 'fade' }} />
         <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
       </Stack>
     </>

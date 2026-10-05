@@ -7,6 +7,8 @@ export type Draft = {
   experiencedOn: string;
   episode?: string;
   rating?: number | null;
+  track?: string;
+  moment?: string;
   quotes?: Quote[];
 };
 
