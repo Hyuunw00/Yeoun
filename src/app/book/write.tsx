@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StarRating } from '@/components/cinema/star-rating';
 import { PaperGrain } from '@/components/library/paper-grain';
 import { LibraryColors, LibraryFonts } from '@/components/library/theme';
+import { AutoGrowInput } from '@/components/auto-grow-input';
 import { PhotoPickerRow } from '@/components/photo-picker-row';
 import { toDateString } from '@/lib/date';
 import type { Quote } from '@/lib/db';
@@ -182,15 +183,14 @@ export default function BookWriteScreen() {
               />
 
               <Text style={styles.section}>감상</Text>
-              <TextInput
+              <AutoGrowInput
                 style={styles.body}
+                minHeight={140}
                 value={editor.body}
                 onChangeText={editor.setBody}
                 placeholder="AI의 도움 없이, 책을 덮은 지금의 생각을 그대로 적어보세요"
                 placeholderTextColor={LibraryColors.inkDim}
                 selectionColor={LibraryColors.pencil}
-                multiline
-                scrollEnabled={false}
               />
 
               <Text style={styles.section}>밑줄</Text>
@@ -202,15 +202,14 @@ export default function BookWriteScreen() {
                     onPress={() => setQuotes((prev) => prev.filter((_, i) => i !== index))}>
                     <Text style={styles.quoteRemoveText}>✕</Text>
                   </Pressable>
-                  <TextInput
+                  <AutoGrowInput
                     style={styles.quoteText}
+                    minHeight={26}
                     value={q.quote}
                     onChangeText={(quote) => updateQuote(index, { quote })}
                     placeholder="마음에 남은 문장을 옮겨 적어보세요"
                     placeholderTextColor={LibraryColors.inkDim}
                     selectionColor={LibraryColors.pencil}
-                    multiline
-                    scrollEnabled={false}
                   />
                   <View style={styles.pageRow}>
                     <Text style={styles.pageLabel}>p.</Text>
@@ -223,15 +222,14 @@ export default function BookWriteScreen() {
                       keyboardType="number-pad"
                     />
                   </View>
-                  <TextInput
+                  <AutoGrowInput
                     style={styles.noteText}
+                    minHeight={26}
                     value={q.note ?? ''}
                     onChangeText={(note) => updateQuote(index, { note })}
                     placeholder="이 문장에 대한 내 생각 (선택)"
                     placeholderTextColor={LibraryColors.inkDim}
                     selectionColor={LibraryColors.pencil}
-                    multiline
-                    scrollEnabled={false}
                   />
                 </View>
               ))}
@@ -338,11 +336,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LibraryColors.rule,
   },
+  // Multiline inputs need an explicit lineHeight so AutoGrowInput can size them exactly
   body: {
-    minHeight: 140,
     fontFamily: LibraryFonts.serif,
     fontSize: 16,
-    lineHeight: 28,
+    lineHeight: 26,
     color: LibraryColors.ink,
     textAlignVertical: 'top',
   },
@@ -365,7 +363,7 @@ const styles = StyleSheet.create({
   quoteText: {
     fontFamily: LibraryFonts.serif,
     fontSize: 15,
-    lineHeight: 26,
+    lineHeight: 24,
     color: LibraryColors.ink,
   },
   pageRow: {
@@ -393,7 +391,8 @@ const styles = StyleSheet.create({
   noteText: {
     fontFamily: LibraryFonts.pen,
     fontSize: 20,
-    lineHeight: 26,
+    // Taller than the font's natural line height, or iOS ignores it and AutoGrowInput undershoots
+    lineHeight: 30,
     color: LibraryColors.pencil,
   },
   addQuote: {
