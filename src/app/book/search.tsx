@@ -1,16 +1,20 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PaperGrain } from '@/components/library/paper-grain';
+import { CatalogCard } from '@/components/library/catalog-card';
 import { LibraryColors, LibraryFonts } from '@/components/library/theme';
 import { searchBooks, type KakaoBook } from '@/lib/kakao';
 
 const DEBOUNCE_MS = 350;
 
-// Search screen styled like a library card catalogue
+function openWrite(book: KakaoBook) {
+  router.push({ pathname: '/book/write', params: { id: book.externalId, book: JSON.stringify(book) } });
+}
+
+// The library's card catalogue: the query goes on the drawer's label, and results
+// come out as catalogue cards filed in the drawer
 export default function BookSearchScreen() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<KakaoBook[]>([]);
@@ -47,72 +51,52 @@ export default function BookSearchScreen() {
   const showEmpty = hasQuery && !loading && !error && results.length === 0;
 
   return (
-    <View style={styles.container}>
-      <PaperGrain />
-      <SafeAreaView style={styles.flex}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.back}>닫기</Text>
-          </Pressable>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Text style={styles.back}>닫기</Text>
+        </Pressable>
+      </View>
+
+      {/* Drawer front with a brass label holder; the input is the label card */}
+      <View style={styles.drawer}>
+        <View style={styles.labelHolder}>
+          <Text style={styles.labelCaption}>CATALOGUE · 도서 목록</Text>
+          <TextInput
+            style={styles.input}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="어떤 책을 읽었나요?"
+            placeholderTextColor={LibraryColors.inkDim}
+            selectionColor={LibraryColors.pencil}
+            autoFocus
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
         </View>
+        <View style={styles.pull} />
+      </View>
 
-        <TextInput
-          style={styles.input}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="어떤 책을 읽었나요?"
-          placeholderTextColor={LibraryColors.inkDim}
-          selectionColor={LibraryColors.pencil}
-          autoFocus
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-        />
+      {showLoading && <ActivityIndicator style={styles.status} color={LibraryColors.brassDim} />}
+      {showError && <Text style={styles.status}>검색하지 못했어요. 잠시 후 다시 시도해주세요</Text>}
+      {showEmpty && <Text style={styles.status}>검색 결과가 없어요</Text>}
 
-        {showLoading && <ActivityIndicator style={styles.status} color={LibraryColors.inkDim} />}
-        {showError && <Text style={styles.status}>검색하지 못했어요. 잠시 후 다시 시도해주세요</Text>}
-        {showEmpty && <Text style={styles.status}>검색 결과가 없어요</Text>}
-
-        <FlatList
-          data={visibleResults}
-          keyExtractor={(item, index) => `${item.externalId}-${index}`}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          renderItem={({ item }) => (
-            <Pressable
-              style={styles.row}
-              onPress={() =>
-                router.push({ pathname: '/book/write', params: { id: item.externalId, book: JSON.stringify(item) } })
-              }>
-              {item.coverUrl ? (
-                <Image source={item.coverUrl} style={styles.cover} contentFit="cover" />
-              ) : (
-                <View style={styles.cover} />
-              )}
-              <View style={styles.info}>
-                <Text style={styles.title} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                <Text style={styles.meta} numberOfLines={1}>
-                  {[item.authors.join(', '), item.publisher, item.publishedDate?.slice(0, 4)]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </Text>
-              </View>
-            </Pressable>
-          )}
-        />
-      </SafeAreaView>
-    </View>
+      <FlatList
+        data={visibleResults}
+        keyExtractor={(item, index) => `${item.externalId}-${index}`}
+        contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        renderItem={({ item }) => <CatalogCard book={item} onPick={openWrite} />}
+      />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: LibraryColors.paper,
-  },
-  flex: {
-    flex: 1,
+    backgroundColor: LibraryColors.wall,
   },
   header: {
     paddingHorizontal: 20,
@@ -121,49 +105,64 @@ const styles = StyleSheet.create({
   back: {
     fontFamily: LibraryFonts.serif,
     fontSize: 14,
+    color: LibraryColors.brassDim,
+  },
+  drawer: {
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 4,
+    backgroundColor: LibraryColors.shelf,
+    borderWidth: 1,
+    borderColor: LibraryColors.shelfEdge,
+    shadowColor: '#000',
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  labelHolder: {
+    alignSelf: 'stretch',
+    paddingTop: 8,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: LibraryColors.brass,
+    borderRadius: 2,
+    backgroundColor: LibraryColors.paper,
+  },
+  labelCaption: {
+    fontFamily: LibraryFonts.serif,
+    fontSize: 10,
+    letterSpacing: 2,
     color: LibraryColors.inkDim,
   },
   input: {
-    marginHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 8,
     fontFamily: LibraryFonts.serif,
     fontSize: 18,
     color: LibraryColors.ink,
-    borderBottomWidth: 1,
-    borderBottomColor: LibraryColors.pencil,
+  },
+  // Brass cup handle of the drawer
+  pull: {
+    width: 64,
+    height: 14,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: LibraryColors.brass,
   },
   status: {
     marginTop: 24,
     textAlign: 'center',
     fontFamily: LibraryFonts.serif,
-    color: LibraryColors.inkDim,
+    color: LibraryColors.brassDim,
   },
-  row: {
-    flexDirection: 'row',
-    gap: 14,
-    marginHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LibraryColors.rule,
-  },
-  cover: {
-    width: 52,
-    height: 76,
-    backgroundColor: LibraryColors.paperEdge,
-  },
-  info: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 6,
-  },
-  title: {
-    fontFamily: LibraryFonts.serifBold,
-    fontSize: 16,
-    color: LibraryColors.ink,
-  },
-  meta: {
-    fontFamily: LibraryFonts.serif,
-    fontSize: 12,
-    color: LibraryColors.inkDim,
+  list: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 40,
+    gap: 12,
   },
 });
