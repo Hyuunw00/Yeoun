@@ -5,6 +5,8 @@ import type { Category, Quote } from '@/lib/db';
 export type Draft = {
   body: string;
   experiencedOn: string;
+  endedOn?: string | null;
+  transport?: string | null;
   episode?: string;
   rating?: number | null;
   track?: string;

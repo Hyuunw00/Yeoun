@@ -21,6 +21,12 @@ create table if not exists public.works (
 
 -- Added later: music release format (single / ep / album)
 alter table public.works add column if not exists format text;
+-- Added later: travel city location and ISO country code
+alter table public.works add column if not exists latitude double precision;
+alter table public.works add column if not exists longitude double precision;
+alter table public.works add column if not exists country_code text;
+-- Added later: photo chosen for a city's postcard
+alter table public.works add column if not exists cover_photo text;
 
 create table if not exists public.records (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
@@ -40,6 +46,11 @@ create table if not exists public.records (
 -- Added after the first version: music track and listening moment
 alter table public.records add column if not exists track text;
 alter table public.records add column if not exists moment text;
+-- Added later: last day of a multi-day trip
+alter table public.records add column if not exists ended_on text;
+-- Added later: how a trip was made and the home city it left from (JSON)
+alter table public.records add column if not exists transport text;
+alter table public.records add column if not exists origin text;
 
 create table if not exists public.record_photos (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,

@@ -15,6 +15,10 @@ export type WorkInput = {
   imageUrl: string | null;
   // Music release format; left as is when omitted
   format?: string | null;
+  // Travel: where the city is, for its pin on the map
+  latitude?: number | null;
+  longitude?: number | null;
+  countryCode?: string | null;
 };
 
 export type Quote = {
@@ -30,6 +34,13 @@ export type RecordInput = {
   rating: number | null;
   track?: string | null;
   moment?: string | null;
+  // Travel: the day the trip ended, when it spans several days
+  endedOn?: string | null;
+  // Travel: how the trip was made ('plane' | 'train' | 'bus' | 'car' | 'ship')
+  transport?: string | null;
+  // Travel: JSON of the home city the trip left from, kept as it was at the time.
+  // Left unchanged on update when omitted.
+  origin?: string | null;
 };
 
 // Each entry upgrades the schema to version (index + 1). Append only; never edit a shipped step.
@@ -86,6 +97,16 @@ const MIGRATIONS = [
    ALTER TABLE records ADD COLUMN moment TEXT;`,
   // Music release format (single / ep / album)
   'ALTER TABLE works ADD COLUMN format TEXT',
+  // Travel: the city's location and ISO country code
+  `ALTER TABLE works ADD COLUMN latitude REAL;
+   ALTER TABLE works ADD COLUMN longitude REAL;
+   ALTER TABLE works ADD COLUMN country_code TEXT;`,
+  // Travel: last day of a multi-day trip
+  'ALTER TABLE records ADD COLUMN ended_on TEXT',
+  // Travel: chosen postcard photo, how each trip was made and where it left from
+  `ALTER TABLE works ADD COLUMN cover_photo TEXT;
+   ALTER TABLE records ADD COLUMN transport TEXT;
+   ALTER TABLE records ADD COLUMN origin TEXT;`,
 ];
 
 export async function migrate(db: SQLiteDatabase) {
@@ -110,15 +131,19 @@ export async function migrate(db: SQLiteDatabase) {
 // Returns the existing work id when the same work was recorded before
 async function upsertWork(db: SQLiteDatabase, work: WorkInput) {
   await db.runAsync(
-    `INSERT INTO works (category, external_id, title, subtitle, year, release_date, image_url, format)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO works (category, external_id, title, subtitle, year, release_date, image_url, format,
+       latitude, longitude, country_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (category, external_id) DO UPDATE SET
        title = excluded.title,
        subtitle = excluded.subtitle,
        year = excluded.year,
        release_date = excluded.release_date,
        image_url = excluded.image_url,
-       format = COALESCE(excluded.format, works.format)`,
+       format = COALESCE(excluded.format, works.format),
+       latitude = COALESCE(excluded.latitude, works.latitude),
+       longitude = COALESCE(excluded.longitude, works.longitude),
+       country_code = COALESCE(excluded.country_code, works.country_code)`,
     work.category,
     work.externalId,
     work.title,
@@ -127,6 +152,9 @@ async function upsertWork(db: SQLiteDatabase, work: WorkInput) {
     work.releaseDate,
     work.imageUrl,
     work.format ?? null,
+    work.latitude ?? null,
+    work.longitude ?? null,
+    work.countryCode ?? null,
   );
   const row = await db.getFirstAsync<{ id: number }>(
     'SELECT id FROM works WHERE category = ? AND external_id = ?',
@@ -180,8 +208,9 @@ export async function saveRecord(
   await db.withTransactionAsync(async () => {
     const workId = await upsertWork(db, work);
     const result = await db.runAsync(
-      `INSERT INTO records (work_id, body, experienced_on, episode, rating, track, moment)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO records (work_id, body, experienced_on, episode, rating, track, moment, ended_on,
+         transport, origin)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       workId,
       record.body,
       record.experiencedOn,
@@ -189,6 +218,9 @@ export async function saveRecord(
       record.rating,
       record.track ?? null,
       record.moment ?? null,
+      record.endedOn ?? null,
+      record.transport ?? null,
+      record.origin ?? null,
     );
     await insertPhotos(db, result.lastInsertRowId, photos);
     await insertQuotes(db, result.lastInsertRowId, quotes);
@@ -210,6 +242,12 @@ export type Work = {
   credits: string | null;
   // Music only: 'single' | 'ep' | 'album'; null until known
   format: string | null;
+  // Travel only
+  latitude: number | null;
+  longitude: number | null;
+  countryCode: string | null;
+  // Photo file chosen for the postcard front; null picks one automatically
+  coverPhoto: string | null;
 };
 
 export type WorkSummary = Work & {
@@ -221,6 +259,9 @@ export type RecordEntry = {
   id: number;
   body: string;
   experiencedOn: string;
+  endedOn: string | null;
+  transport: string | null;
+  origin: string | null;
   episode: string | null;
   rating: number | null;
   track: string | null;
@@ -232,7 +273,8 @@ export type RecordEntry = {
 
 type RecordRow = Omit<RecordEntry, 'photos' | 'quotes'>;
 
-const RECORD_COLUMNS = `id, body, experienced_on AS experiencedOn, episode, rating, track, moment,
+const RECORD_COLUMNS = `id, body, experienced_on AS experiencedOn, ended_on AS endedOn, transport, origin, episode,
+  rating, track, moment,
   created_at AS createdAt`;
 
 async function attachPhotos(db: SQLiteDatabase, rows: RecordRow[]): Promise<RecordEntry[]> {
@@ -260,7 +302,8 @@ async function attachPhotos(db: SQLiteDatabase, rows: RecordRow[]): Promise<Reco
 
 const WORK_COLUMNS = `w.id, w.category, w.external_id AS externalId, w.title, w.subtitle,
   w.year, w.release_date AS releaseDate, w.image_url AS imageUrl,
-  w.backdrop_url AS backdropUrl, w.credits, w.format`;
+  w.backdrop_url AS backdropUrl, w.credits, w.format, w.latitude, w.longitude,
+  w.country_code AS countryCode, w.cover_photo AS coverPhoto`;
 
 // Most recently experienced first. `query` matches titles, record bodies and quotes.
 export function listWorks(db: SQLiteDatabase, category: Category, query = '') {
@@ -327,6 +370,35 @@ export async function setWorkFormat(db: SQLiteDatabase, workId: number, format: 
   emitDataChanged();
 }
 
+export type TravelRoute = {
+  recordId: number;
+  workId: number;
+  transport: string | null;
+  // JSON of the home city, as stored on the record
+  origin: string;
+  latitude: number;
+  longitude: number;
+  // The destination's country
+  countryCode: string | null;
+};
+
+// Every trip that knows where it left from, for drawing routes on the map
+export function listTravelRoutes(db: SQLiteDatabase) {
+  return db.getAllAsync<TravelRoute>(
+    `SELECT r.id AS recordId, w.id AS workId, r.transport, r.origin, w.latitude, w.longitude,
+       w.country_code AS countryCode
+     FROM records r JOIN works w ON w.id = r.work_id
+     WHERE w.category = 'travel' AND r.origin IS NOT NULL
+       AND w.latitude IS NOT NULL AND w.longitude IS NOT NULL
+     ORDER BY r.experienced_on`,
+  );
+}
+
+export async function setWorkCover(db: SQLiteDatabase, workId: number, fileName: string | null) {
+  await db.runAsync('UPDATE works SET cover_photo = ? WHERE id = ?', fileName, workId);
+  emitDataChanged();
+}
+
 export async function getRecord(db: SQLiteDatabase, id: number) {
   const row = await db.getFirstAsync<RecordRow>(`SELECT ${RECORD_COLUMNS} FROM records WHERE id = ?`, id);
   if (!row) return null;
@@ -346,8 +418,8 @@ export async function updateRecord(
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE records
-       SET body = ?, experienced_on = ?, episode = ?, rating = ?, track = ?, moment = ?,
-           updated_at = datetime('now')
+       SET body = ?, experienced_on = ?, episode = ?, rating = ?, track = ?, moment = ?, ended_on = ?,
+           transport = ?, origin = COALESCE(?, origin), updated_at = datetime('now')
        WHERE id = ?`,
       record.body,
       record.experiencedOn,
@@ -355,6 +427,9 @@ export async function updateRecord(
       record.rating,
       record.track ?? null,
       record.moment ?? null,
+      record.endedOn ?? null,
+      record.transport ?? null,
+      record.origin ?? null,
       id,
     );
     await db.runAsync('DELETE FROM record_photos WHERE record_id = ?', id);

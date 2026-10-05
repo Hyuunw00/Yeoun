@@ -17,7 +17,7 @@ import {
   type WorkInput,
 } from '@/lib/db';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/draft';
-import { deletePhotoFiles, MAX_PHOTOS_PER_RECORD, persistPhoto, photoUri, pickPhotos } from '@/lib/photos';
+import { deletePhotoFiles, maxPhotos, persistPhoto, photoUri, pickPhotos } from '@/lib/photos';
 
 const DRAFT_SAVE_DELAY_MS = 500;
 
@@ -36,6 +36,8 @@ type Options = {
   withQuotes?: boolean;
   // Prefill for a new record, e.g. the song picked in music search
   initialTrack?: string | null;
+  // Travel: JSON of the home city a new record leaves from (edits keep the stored one)
+  origin?: string | null;
   // Where to go after saving / deleting
   onSaved: (isEdit: boolean) => void;
   onWorkRemoved: () => void;
@@ -51,6 +53,7 @@ export function useRecordEditor({
   newWork,
   withQuotes = false,
   initialTrack,
+  origin,
   onSaved,
   onWorkRemoved,
 }: Options) {
@@ -62,6 +65,11 @@ export function useRecordEditor({
   const [recordError, setRecordError] = useState(false);
   const [body, setBody] = useState('');
   const [experiencedOn, setExperiencedOn] = useState(() => toDateString(new Date()));
+  // Optional last day (travel); null for a single-day record
+  const [endedOn, setEndedOn] = useState<string | null>(null);
+  const [transport, setTransport] = useState<string | null>(null);
+  // The stored origin of the record being edited (travel)
+  const [savedOrigin, setSavedOrigin] = useState<string | null>(null);
   const [episode, setEpisode] = useState('');
   const [rating, setRating] = useState<number | null>(null);
   const [track, setTrack] = useState(initialTrack ?? '');
@@ -87,6 +95,9 @@ export function useRecordEditor({
           setSavedWork(work);
           setBody(record.body);
           setExperiencedOn(record.experiencedOn);
+          setEndedOn(record.endedOn);
+          setTransport(record.transport);
+          setSavedOrigin(record.origin);
           setEpisode(record.episode ?? '');
           setRating(record.rating);
           setTrack(record.track ?? '');
@@ -105,6 +116,8 @@ export function useRecordEditor({
         // Don't clobber anything typed before the draft finished loading
         setBody((prev) => prev || draft.body);
         setExperiencedOn(draft.experiencedOn);
+        setEndedOn(draft.endedOn ?? null);
+        setTransport(draft.transport ?? null);
         setEpisode((prev) => prev || (draft.episode ?? ''));
         setRating((prev) => prev ?? draft.rating ?? null);
         setTrack((prev) => prev || (draft.track ?? ''));
@@ -123,12 +136,22 @@ export function useRecordEditor({
       const hasContent =
         body.trim() || rating !== null || moment.trim() || quotes.some((q) => q.quote.trim());
       if (hasContent) {
-        saveDraft(category, externalId, { body, experiencedOn, episode, rating, track, moment, quotes });
+        saveDraft(category, externalId, {
+          body,
+          experiencedOn,
+          endedOn,
+          transport,
+          episode,
+          rating,
+          track,
+          moment,
+          quotes,
+        });
       }
       else clearDraft(category, externalId);
     }, DRAFT_SAVE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [category, externalId, body, experiencedOn, episode, rating, track, moment, quotes]);
+  }, [category, externalId, body, experiencedOn, endedOn, transport, episode, rating, track, moment, quotes]);
 
   // A corrupted draft date would crash the native picker, so fall back to today
   const parsedDate = fromDateString(experiencedOn);
@@ -146,6 +169,10 @@ export function useRecordEditor({
       const record = {
         body: body.trim(),
         experiencedOn,
+        // An end before the start (start moved later) means a single day
+        endedOn: endedOn && endedOn > experiencedOn ? endedOn : null,
+        transport,
+        origin: isEdit ? undefined : origin,
         episode: episode.trim() || null,
         rating,
         track: track.trim() || null,
@@ -181,11 +208,13 @@ export function useRecordEditor({
     }
   }
 
+  const photoLimit = maxPhotos(category);
+
   async function addPhotos() {
     setPicking(true);
     try {
-      const picked = await pickPhotos(MAX_PHOTOS_PER_RECORD - photos.length);
-      setPhotos((prev) => [...prev, ...picked.map((uri) => ({ uri }))].slice(0, MAX_PHOTOS_PER_RECORD));
+      const picked = await pickPhotos(photoLimit - photos.length);
+      setPhotos((prev) => [...prev, ...picked.map((uri) => ({ uri }))].slice(0, photoLimit));
     } catch {
       Alert.alert('사진을 불러오지 못했어요');
     } finally {
@@ -226,6 +255,11 @@ export function useRecordEditor({
     experiencedOn,
     setExperiencedOn,
     pickerDate,
+    endedOn,
+    setEndedOn,
+    transport,
+    setTransport,
+    savedOrigin,
     episode,
     setEpisode,
     rating,
@@ -237,6 +271,7 @@ export function useRecordEditor({
     quotes,
     setQuotes,
     photos,
+    photoLimit,
     addPhotos,
     removePhoto,
     picking,

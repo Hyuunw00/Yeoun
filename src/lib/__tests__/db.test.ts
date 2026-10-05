@@ -37,7 +37,7 @@ beforeEach(() => {
 describe('migrate', () => {
   it('sets connection pragmas outside any transaction', async () => {
     const { db, sqlite } = createFakeDb();
-    db.getFirstAsync.mockResolvedValueOnce({ user_version: 9 });
+    db.getFirstAsync.mockResolvedValueOnce({ user_version: 12 });
 
     await migrate(sqlite);
 
@@ -50,9 +50,9 @@ describe('migrate', () => {
 
     await migrate(sqlite);
 
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(9);
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(12);
     const sql = sqlOf(tx.execAsync);
-    expect(sql).toHaveLength(18);
+    expect(sql).toHaveLength(24);
     expect(sql[0]).toContain('CREATE TABLE works');
     expect(sql[0]).toContain('CREATE TABLE records');
     expect(sql[1]).toBe('PRAGMA user_version = 1');
@@ -73,6 +73,14 @@ describe('migrate', () => {
     expect(sql[15]).toBe('PRAGMA user_version = 8');
     expect(sql[16]).toBe('ALTER TABLE works ADD COLUMN format TEXT');
     expect(sql[17]).toBe('PRAGMA user_version = 9');
+    expect(sql[18]).toContain('ADD COLUMN country_code TEXT');
+    expect(sql[19]).toBe('PRAGMA user_version = 10');
+    expect(sql[20]).toBe('ALTER TABLE records ADD COLUMN ended_on TEXT');
+    expect(sql[21]).toBe('PRAGMA user_version = 11');
+    expect(sql[22]).toContain('ADD COLUMN cover_photo TEXT');
+    expect(sql[22]).toContain('ADD COLUMN transport TEXT');
+    expect(sql[22]).toContain('ADD COLUMN origin TEXT');
+    expect(sql[23]).toBe('PRAGMA user_version = 12');
   });
 
   it('treats a missing user_version row as version 0', async () => {
@@ -82,7 +90,7 @@ describe('migrate', () => {
     await migrate(sqlite);
 
     expect(sqlOf(tx.execAsync)[0]).toContain('CREATE TABLE works');
-    expect(sqlOf(tx.execAsync).at(-1)).toBe('PRAGMA user_version = 9');
+    expect(sqlOf(tx.execAsync).at(-1)).toBe('PRAGMA user_version = 12');
   });
 
   it('only runs the remaining steps from an intermediate version', async () => {
@@ -104,6 +112,12 @@ describe('migrate', () => {
       'PRAGMA user_version = 8',
       'ALTER TABLE works ADD COLUMN format TEXT',
       'PRAGMA user_version = 9',
+      expect.stringContaining('ADD COLUMN country_code'),
+      'PRAGMA user_version = 10',
+      'ALTER TABLE records ADD COLUMN ended_on TEXT',
+      'PRAGMA user_version = 11',
+      expect.stringContaining('ADD COLUMN cover_photo'),
+      'PRAGMA user_version = 12',
     ]);
   });
 
@@ -123,7 +137,7 @@ describe('migrate', () => {
   });
 
   it('does not run any step when already at or above the latest version', async () => {
-    for (const version of [9, 12]) {
+    for (const version of [12, 13]) {
       const { db, sqlite } = createFakeDb();
       db.getFirstAsync.mockResolvedValueOnce({ user_version: version });
 
