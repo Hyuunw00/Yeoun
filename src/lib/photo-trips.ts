@@ -18,6 +18,10 @@ const CITY_RADIUS_KM = 40;
 const MIN_PHOTOS = 3;
 const PAGE = 500;
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+// The iOS geocoder throttles bursts of requests; failed lookups wait and try again
+const GEOCODE_RETRY_DELAYS_MS = [1500, 4000, 10000];
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const LOCATION_CONCURRENCY = 8;
 
 export type GeoPhoto = { id: string; time: number; latitude: number; longitude: number };
@@ -125,7 +129,14 @@ export async function scanPhotos(years: number | null, onProgress: (done: number
 // Names a found trip's city with the iOS geocoder, the same way search does
 export async function nameTrip(trip: PhotoTrip): Promise<City | null> {
   const coords = { latitude: trip.latitude, longitude: trip.longitude };
-  const [address] = await Location.reverseGeocodeAsync(coords);
-  if (!address) return null;
-  return cityFromAddress(address.city ?? address.region ?? '', coords, address);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const [address] = await Location.reverseGeocodeAsync(coords);
+      if (!address) return null;
+      return cityFromAddress(address.city ?? address.region ?? '', coords, address);
+    } catch (error) {
+      if (attempt >= GEOCODE_RETRY_DELAYS_MS.length) throw error;
+      await wait(GEOCODE_RETRY_DELAYS_MS[attempt]);
+    }
+  }
 }

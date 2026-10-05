@@ -52,7 +52,8 @@ type Candidate = {
 type Phase =
   { step: 'intro' } | { step: 'scanning'; label: string } | { step: 'review' } | { step: 'importing'; label: string };
 
-const photoSource = (id: string) => ({ uri: `ph://${id}` });
+// Asset ids on iOS are already "ph://<localIdentifier>" URIs, which expo-image loads directly
+const photoSource = (id: string) => ({ uri: id });
 const cityLine = (city: City | null) => [city?.region, city?.country].filter(Boolean).join(' · ');
 
 // Bringing in past trips from the photo library: photos taken away from home are grouped
