@@ -8,6 +8,8 @@ import { CinemaFonts } from '@/components/cinema/theme';
 import { PaperGrain } from '@/components/library/paper-grain';
 import { LibraryFonts } from '@/components/library/theme';
 import { MapColors } from '@/components/travel/theme';
+import { useDb } from '@/lib/database';
+import { countTripsWithoutOrigin, fillMissingOrigins } from '@/lib/db';
 import { saveHome } from '@/lib/home';
 import { resolveCity, suggestCities, type CitySuggestion } from '@/lib/places';
 
@@ -18,6 +20,7 @@ const DEBOUNCE_MS = 250;
 export default function TravelSearchScreen() {
   const { mode } = useLocalSearchParams<{ mode?: 'home' }>();
   const isHome = mode === 'home';
+  const db = useDb();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CitySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,8 +63,32 @@ export default function TravelSearchScreen() {
       }
       if (isHome) {
         const { name, countryCode, latitude, longitude } = city;
-        await saveHome({ name, countryCode, latitude, longitude });
-        router.back();
+        const home = { name, countryCode, latitude, longitude };
+        await saveHome(home);
+        const missing = await countTripsWithoutOrigin(db);
+        if (missing === 0) {
+          router.back();
+          return;
+        }
+        // Earlier trips without a starting point can take this home as theirs, once
+        Alert.alert(
+          `출발지가 없는 여행 ${missing}개에도 ${name}을(를) 넣을까요?`,
+          '지도에 출발지에서 가는 길이 그려져요',
+          [
+            { text: '아니요', style: 'cancel', onPress: () => router.back() },
+            {
+              text: '넣기',
+              onPress: async () => {
+                try {
+                  await fillMissingOrigins(db, JSON.stringify(home));
+                } catch {
+                  Alert.alert('출발지를 넣지 못했어요', '잠시 후 다시 시도해주세요');
+                }
+                router.back();
+              },
+            },
+          ],
+        );
         return;
       }
       router.push({ pathname: '/travel/write', params: { id: city.externalId, city: JSON.stringify(city) } });

@@ -418,6 +418,20 @@ export async function hasTravelRecord(db: SQLiteDatabase, externalId: string, st
   return !!row;
 }
 
+const NO_ORIGIN = `origin IS NULL AND work_id IN (SELECT id FROM works WHERE category = 'travel')`;
+
+// Trips recorded before home was set don't know where they left from
+export async function countTripsWithoutOrigin(db: SQLiteDatabase) {
+  const row = await db.getFirstAsync<{ count: number }>(`SELECT COUNT(*) AS count FROM records WHERE ${NO_ORIGIN}`);
+  return row?.count ?? 0;
+}
+
+// Stores `origin` (home city JSON) on every such trip, so it stays put if home moves later
+export async function fillMissingOrigins(db: SQLiteDatabase, origin: string) {
+  await db.runAsync(`UPDATE records SET origin = ?, updated_at = datetime('now') WHERE ${NO_ORIGIN}`, origin);
+  emitDataChanged();
+}
+
 export async function setWorkCover(db: SQLiteDatabase, workId: number, fileName: string | null) {
   await db.runAsync('UPDATE works SET cover_photo = ? WHERE id = ?', fileName, workId);
   emitDataChanged();
