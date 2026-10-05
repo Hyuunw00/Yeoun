@@ -41,12 +41,20 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "기록에 사진을 첨부하려면 사진 접근이 필요해요",
+          "photosPermission": "기록에 사진을 첨부하고 사진 속 여행을 불러오려면 사진 접근이 필요해요",
           "cameraPermission": false,
           "microphonePermission": false
         }
       ],
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "기록에 사진을 첨부하고 사진 속 여행을 불러오려면 사진 접근이 필요해요",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

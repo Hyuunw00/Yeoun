@@ -194,6 +194,10 @@ export default function TravelScreen() {
               hitSlop={6}>
               <SymbolView name={view === 'map' ? 'list.bullet' : 'map'} tintColor={MapColors.ink} size={18} />
             </Pressable>
+            {/* Past trips found in the photo library */}
+            <Pressable style={styles.button} onPress={() => router.push('/travel/import')} hitSlop={6}>
+              <SymbolView name="photo.on.rectangle.angled" tintColor={MapColors.ink} size={17} />
+            </Pressable>
             <Pressable style={styles.button} onPress={() => router.push('/travel/search')} hitSlop={6}>
               <SymbolView name="plus" tintColor={MapColors.ink} size={18} />
             </Pressable>

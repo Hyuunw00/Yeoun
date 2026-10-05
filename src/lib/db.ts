@@ -407,6 +407,17 @@ export function listTravelRoutes(db: SQLiteDatabase) {
   );
 }
 
+// Whether a trip to this city starting on this day is already recorded
+export async function hasTravelRecord(db: SQLiteDatabase, externalId: string, startedOn: string) {
+  const row = await db.getFirstAsync<{ id: number }>(
+    `SELECT r.id FROM records r JOIN works w ON w.id = r.work_id
+     WHERE w.category = 'travel' AND w.external_id = ? AND r.experienced_on = ?`,
+    externalId,
+    startedOn,
+  );
+  return !!row;
+}
+
 export async function setWorkCover(db: SQLiteDatabase, workId: number, fileName: string | null) {
   await db.runAsync('UPDATE works SET cover_photo = ? WHERE id = ?', fileName, workId);
   emitDataChanged();
