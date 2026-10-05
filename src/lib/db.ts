@@ -14,6 +14,12 @@ export type WorkInput = {
   imageUrl: string | null;
 };
 
+export type Quote = {
+  quote: string;
+  page: string | null;
+  note: string | null;
+};
+
 export type RecordInput = {
   body: string;
   experiencedOn: string;
@@ -57,6 +63,16 @@ const MIGRATIONS = [
      position INTEGER NOT NULL
    );
    CREATE INDEX record_photos_record_id ON record_photos(record_id);`,
+  // Underlined passages from a book: the quote, its page and my thought on it
+  `CREATE TABLE record_quotes (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     record_id INTEGER NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+     quote TEXT NOT NULL,
+     page TEXT,
+     note TEXT,
+     position INTEGER NOT NULL
+   );
+   CREATE INDEX record_quotes_record_id ON record_quotes(record_id);`,
 ];
 
 export async function migrate(db: SQLiteDatabase) {
@@ -116,6 +132,19 @@ async function insertPhotos(db: SQLiteDatabase, recordId: number, photos: string
   }
 }
 
+async function insertQuotes(db: SQLiteDatabase, recordId: number, quotes: Quote[]) {
+  for (const [position, q] of quotes.entries()) {
+    await db.runAsync(
+      'INSERT INTO record_quotes (record_id, quote, page, note, position) VALUES (?, ?, ?, ?, ?)',
+      recordId,
+      q.quote,
+      q.page,
+      q.note,
+      position,
+    );
+  }
+}
+
 async function photoNames(db: SQLiteDatabase, where: string, id: number) {
   const rows = await db.getAllAsync<{ fileName: string }>(
     `SELECT p.file_name AS fileName FROM record_photos p
@@ -131,6 +160,7 @@ export async function saveRecord(
   work: WorkInput,
   record: RecordInput,
   photos: string[],
+  quotes: Quote[] = [],
 ) {
   await db.withTransactionAsync(async () => {
     const workId = await upsertWork(db, work);
@@ -143,6 +173,7 @@ export async function saveRecord(
       record.rating,
     );
     await insertPhotos(db, result.lastInsertRowId, photos);
+    await insertQuotes(db, result.lastInsertRowId, quotes);
   });
 }
 
@@ -170,9 +201,10 @@ export type RecordEntry = {
   rating: number | null;
   createdAt: string;
   photos: string[];
+  quotes: Quote[];
 };
 
-type RecordRow = Omit<RecordEntry, 'photos'>;
+type RecordRow = Omit<RecordEntry, 'photos' | 'quotes'>;
 
 const RECORD_COLUMNS = `id, body, experienced_on AS experiencedOn, episode, rating, created_at AS createdAt`;
 
@@ -184,16 +216,25 @@ async function attachPhotos(db: SQLiteDatabase, rows: RecordRow[]): Promise<Reco
      ORDER BY position`,
     ...rows.map((row) => row.id),
   );
+  const quotes = await db.getAllAsync<Quote & { recordId: number }>(
+    `SELECT record_id AS recordId, quote, page, note FROM record_quotes
+     WHERE record_id IN (${rows.map(() => '?').join(', ')})
+     ORDER BY position`,
+    ...rows.map((row) => row.id),
+  );
   return rows.map((row) => ({
     ...row,
     photos: photos.filter((p) => p.recordId === row.id).map((p) => p.fileName),
+    quotes: quotes
+      .filter((q) => q.recordId === row.id)
+      .map(({ quote, page, note }) => ({ quote, page, note })),
   }));
 }
 
 const WORK_COLUMNS = `w.id, w.category, w.external_id AS externalId, w.title, w.subtitle,
   w.year, w.release_date AS releaseDate, w.image_url AS imageUrl`;
 
-// Most recently watched first. `query` matches titles and record bodies.
+// Most recently experienced first. `query` matches titles, record bodies and quotes.
 export function listWorks(db: SQLiteDatabase, category: Category, query = '') {
   const trimmed = query.trim();
   const pattern = `%${trimmed.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -205,11 +246,15 @@ export function listWorks(db: SQLiteDatabase, category: Category, query = '') {
      JOIN records r ON r.work_id = w.id
      WHERE w.category = ?
        AND (? = '' OR w.title LIKE ? ESCAPE '\\' OR w.subtitle LIKE ? ESCAPE '\\'
-         OR EXISTS (SELECT 1 FROM records sr WHERE sr.work_id = w.id AND sr.body LIKE ? ESCAPE '\\'))
+         OR EXISTS (SELECT 1 FROM records sr WHERE sr.work_id = w.id AND sr.body LIKE ? ESCAPE '\\')
+         OR EXISTS (SELECT 1 FROM record_quotes q JOIN records qr ON qr.id = q.record_id
+                    WHERE qr.work_id = w.id AND (q.quote LIKE ? ESCAPE '\\' OR q.note LIKE ? ESCAPE '\\')))
      GROUP BY w.id
      ORDER BY MAX(r.experienced_on) DESC, MAX(r.id) DESC`,
     category,
     trimmed,
+    pattern,
+    pattern,
     pattern,
     pattern,
     pattern,
@@ -247,6 +292,8 @@ export async function updateRecord(
   id: number,
   record: RecordInput,
   photos: string[],
+  // Omit to leave existing quotes untouched (categories without quotes)
+  quotes?: Quote[],
 ) {
   const previous = await photoNames(db, 'r.id', id);
   await db.withTransactionAsync(async () => {
@@ -262,6 +309,10 @@ export async function updateRecord(
     );
     await db.runAsync('DELETE FROM record_photos WHERE record_id = ?', id);
     await insertPhotos(db, id, photos);
+    if (quotes) {
+      await db.runAsync('DELETE FROM record_quotes WHERE record_id = ?', id);
+      await insertQuotes(db, id, quotes);
+    }
   });
   // Files are removed only after the DB change has committed
   deletePhotoFiles(previous.filter((name) => !photos.includes(name)));

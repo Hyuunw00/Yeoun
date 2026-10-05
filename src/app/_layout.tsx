@@ -1,5 +1,6 @@
 import { BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
 import { NanumMyeongjo_400Regular, NanumMyeongjo_700Bold } from '@expo-google-fonts/nanum-myeongjo';
+import { NanumPenScript_400Regular } from '@expo-google-fonts/nanum-pen-script';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +16,7 @@ export default function RootLayout() {
     BebasNeue_400Regular,
     NanumMyeongjo_400Regular,
     NanumMyeongjo_700Bold,
+    NanumPenScript_400Regular,
   });
   const [dbState, setDbState] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -46,8 +48,11 @@ export default function RootLayout() {
           // Avoid white flashes between dark screens
           contentStyle: { backgroundColor: CinemaColors.theater },
         }}>
+        <Stack.Screen name="(tabs)" />
         {/* Fade in after the lobby lights go down */}
         <Stack.Screen name="movie/work/[id]" options={{ animation: 'fade' }} />
+        {/* Fade in as the book comes off the shelf and opens */}
+        <Stack.Screen name="book/work/[id]" options={{ animation: 'fade' }} />
       </Stack>
     </>
   );

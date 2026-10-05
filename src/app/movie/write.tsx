@@ -1,11 +1,9 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Pressable,
   StyleSheet,
@@ -18,17 +16,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { FilmGrain } from '@/components/cinema/film-grain';
 import { StarRating } from '@/components/cinema/star-rating';
 import { CinemaColors, CinemaFonts } from '@/components/cinema/theme';
-import { useDb } from '@/lib/database';
-import { fromDateString, toDateString } from '@/lib/date';
-import { deleteRecord, getRecord, getWork, saveRecord, updateRecord, type Work } from '@/lib/db';
-import { clearDraft, loadDraft, saveDraft } from '@/lib/draft';
-import { deletePhotoFiles, MAX_PHOTOS_PER_RECORD, persistPhoto, photoUri, pickPhotos } from '@/lib/photos';
+import { toDateString } from '@/lib/date';
+import { MAX_PHOTOS_PER_RECORD } from '@/lib/photos';
 import { getTitle, isSeries, parseExternalId, posterUrl, toExternalId, type TmdbTitle } from '@/lib/tmdb';
-
-const DRAFT_SAVE_DELAY_MS = 500;
-
-// `fileName` is set once a photo is persisted; new picks only have a temp uri
-type PhotoItem = { uri: string; fileName?: string };
+import { useRecordEditor } from '@/lib/use-record-editor';
 
 export default function MovieWriteScreen() {
   // `id` is the work's external id ("123" for a movie, "tv:123" for a series)
@@ -39,83 +30,65 @@ export default function MovieWriteScreen() {
     recordId?: string;
     workId?: string;
   }>();
-  const isEdit = !!recordId;
-  const db = useDb();
 
   // New records come from TMDB; edits use the work already saved in the DB,
   // so an existing record stays editable offline
   const [movie, setMovie] = useState<TmdbTitle | null>(null);
-  const [savedWork, setSavedWork] = useState<Work | null>(null);
-  const [loadError, setLoadError] = useState(false);
-  const [recordLoaded, setRecordLoaded] = useState(!isEdit);
-  const [body, setBody] = useState('');
-  const [experiencedOn, setExperiencedOn] = useState(() => toDateString(new Date()));
-  const [episode, setEpisode] = useState('');
-  const [rating, setRating] = useState<number | null>(null);
-  const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  const [picking, setPicking] = useState(false);
-  const [saving, setSaving] = useState(false);
-  // Guards against a double tap inserting the record twice before re-render
-  const savingRef = useRef(false);
-  const draftReady = useRef(false);
+  const [movieError, setMovieError] = useState(false);
 
   useEffect(() => {
-    if (isEdit) return;
+    if (recordId) return;
     const controller = new AbortController();
     const { mediaType, id: tmdbId } = parseExternalId(id);
     getTitle(mediaType, tmdbId, controller.signal)
       .then(setMovie)
       .catch(() => {
-        if (!controller.signal.aborted) setLoadError(true);
+        if (!controller.signal.aborted) setMovieError(true);
       });
     return () => controller.abort();
-  }, [id, isEdit]);
+  }, [id, recordId]);
 
-  useEffect(() => {
-    if (recordId) {
-      // Editing loads the saved record and skips drafts entirely
-      Promise.all([getRecord(db, Number(recordId)), getWork(db, Number(workId))])
-        .then(([record, work]) => {
-          if (!record || !work) {
-            Alert.alert('이미 지워진 기록이에요');
-            router.back();
-            return;
-          }
-          setSavedWork(work);
-          setBody(record.body);
-          setExperiencedOn(record.experiencedOn);
-          setEpisode(record.episode ?? '');
-          setRating(record.rating);
-          setPhotos(record.photos.map((fileName) => ({ uri: photoUri(fileName), fileName })));
-          setRecordLoaded(true);
-        })
-        .catch(() => setLoadError(true));
-      return;
-    }
-    loadDraft('movie', id)
-      .catch(() => null)
-      .then((draft) => {
-        if (!draft) return;
-        // Don't clobber anything typed before the draft finished loading
-        setBody((prev) => prev || draft.body);
-        setExperiencedOn(draft.experiencedOn);
-        setEpisode((prev) => prev || (draft.episode ?? ''));
-        setRating((prev) => prev ?? draft.rating ?? null);
-      })
-      .finally(() => {
-        draftReady.current = true;
-      });
-  }, [db, id, recordId, workId]);
-
-  // Persist the draft so an app crash or accidental back doesn't lose writing
-  useEffect(() => {
-    if (!draftReady.current) return;
-    const timer = setTimeout(() => {
-      if (body.trim() || rating !== null) saveDraft('movie', id, { body, experiencedOn, episode, rating });
-      else clearDraft('movie', id);
-    }, DRAFT_SAVE_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [id, body, experiencedOn, episode, rating]);
+  const editor = useRecordEditor({
+    category: 'movie',
+    externalId: id,
+    recordId,
+    workId,
+    newWork: movie && {
+      category: 'movie',
+      externalId: toExternalId(movie),
+      title: movie.title,
+      subtitle: movie.originalTitle !== movie.title ? movie.originalTitle : null,
+      year: movie.releaseDate?.slice(0, 4) || null,
+      releaseDate: movie.releaseDate || null,
+      imageUrl: movie.posterPath ? posterUrl(movie.posterPath, 'w500') : null,
+    },
+    onSaved: (isEdit) => {
+      // Back to the work screen when editing or re-recording, otherwise to the lobby
+      if (isEdit || from === 'work') router.back();
+      else router.dismissTo('/movie');
+    },
+    // With its last record gone the work screen is empty, so go back to the lobby
+    onWorkRemoved: () => router.dismissTo('/movie'),
+  });
+  const {
+    isEdit,
+    savedWork,
+    body,
+    setBody,
+    setExperiencedOn,
+    pickerDate,
+    episode,
+    setEpisode,
+    rating,
+    setRating,
+    photos,
+    addPhotos,
+    removePhoto,
+    picking,
+    saving,
+    canSave,
+  } = editor;
+  const loadError = isEdit ? editor.recordError : movieError;
 
   const header = isEdit
     ? savedWork && {
@@ -131,100 +104,6 @@ export default function MovieWriteScreen() {
         releaseDate: movie.releaseDate || null,
       };
 
-  // A corrupted draft date would crash the native picker, so fall back to today
-  const parsedDate = fromDateString(experiencedOn);
-  const pickerDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
-
-  // Body is optional: just marking that it was watched is a valid record
-  const canSave = (isEdit ? recordLoaded : !!movie) && !saving && !picking;
-
-  async function handleSave() {
-    if (!canSave || savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
-    const newlyPersisted: string[] = [];
-    try {
-      const record = { body: body.trim(), experiencedOn, episode: episode.trim() || null, rating };
-      const photoNames = await Promise.all(
-        photos.map(async (p) => {
-          if (p.fileName) return p.fileName;
-          const name = await persistPhoto(p.uri);
-          newlyPersisted.push(name);
-          return name;
-        }),
-      );
-      if (isEdit) {
-        await updateRecord(db, Number(recordId), record, photoNames);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.back();
-        return;
-      }
-      if (!movie) return;
-      await saveRecord(
-        db,
-        {
-          category: 'movie',
-          externalId: toExternalId(movie),
-          title: movie.title,
-          subtitle: movie.originalTitle !== movie.title ? movie.originalTitle : null,
-          year: movie.releaseDate?.slice(0, 4) || null,
-          releaseDate: movie.releaseDate || null,
-          imageUrl: movie.posterPath ? posterUrl(movie.posterPath, 'w500') : null,
-        },
-        record,
-        photoNames,
-      );
-      await clearDraft('movie', id);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      // Return to the work screen when re-recording, otherwise back to home
-      if (from === 'work') router.back();
-      else router.dismissAll();
-    } catch {
-      // Drop copies made for this attempt; the temp files remain for a retry
-      deletePhotoFiles(newlyPersisted);
-      savingRef.current = false;
-      setSaving(false);
-      Alert.alert('저장하지 못했어요', '잠시 후 다시 시도해주세요');
-    }
-  }
-
-  async function addPhotos() {
-    setPicking(true);
-    try {
-      const picked = await pickPhotos(MAX_PHOTOS_PER_RECORD - photos.length);
-      setPhotos((prev) => [...prev, ...picked.map((uri) => ({ uri }))].slice(0, MAX_PHOTOS_PER_RECORD));
-    } catch {
-      Alert.alert('사진을 불러오지 못했어요');
-    } finally {
-      setPicking(false);
-    }
-  }
-
-  function removePhoto(index: number) {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function confirmDelete() {
-    if (!recordId) return;
-    Alert.alert('이 기록을 지울까요?', '지운 기록은 되돌릴 수 없어요', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            const workRemoved = await deleteRecord(db, Number(recordId));
-            // With its last record gone the work screen is empty, so go back to the lobby
-            if (workRemoved) router.dismissAll();
-            else router.back();
-          } catch {
-            Alert.alert('지우지 못했어요', '잠시 후 다시 시도해주세요');
-          }
-        },
-      },
-    ]);
-  }
-
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.flex}>
@@ -234,12 +113,12 @@ export default function MovieWriteScreen() {
               <Text style={styles.headerButton}>뒤로</Text>
             </Pressable>
             <View style={styles.headerActions}>
-              {!!recordId && (
-                <Pressable onPress={confirmDelete} disabled={saving} hitSlop={12}>
+              {isEdit && (
+                <Pressable onPress={editor.confirmDelete} disabled={saving} hitSlop={12}>
                   <Text style={styles.headerButton}>삭제</Text>
                 </Pressable>
               )}
-              <Pressable onPress={handleSave} disabled={!canSave} hitSlop={12}>
+              <Pressable onPress={editor.save} disabled={!canSave} hitSlop={12}>
                 {saving ? (
                   <ActivityIndicator color={CinemaColors.brass} />
                 ) : (
@@ -409,10 +288,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: CinemaColors.textDim,
   },
+  // Fixed height with no vertical padding keeps the placeholder vertically centered
   episode: {
     alignSelf: 'flex-start',
     minWidth: 140,
-    paddingVertical: 4,
+    height: 28,
+    paddingVertical: 0,
     fontFamily: CinemaFonts.serif,
     fontSize: 13,
     color: CinemaColors.brass,

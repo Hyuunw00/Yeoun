@@ -9,17 +9,22 @@ const STAR_COUNT = 5;
 type Props = {
   value: number | null;
   size?: number;
+  filledColor?: string;
+  emptyColor?: string;
   // Omit to render read-only
   onChange?: (value: number | null) => void;
 };
 
-function Star({ fill, size }: { fill: number; size: number }) {
+type StarProps = { fill: number; size: number; filledColor: string; emptyColor: string };
+
+function Star({ fill, size, filledColor, emptyColor }: StarProps) {
+  const glyph = { width: size, fontSize: size, lineHeight: size };
   return (
     <View style={{ width: size, height: size }}>
-      <Text style={[styles.star, styles.empty, { width: size, fontSize: size, lineHeight: size }]}>★</Text>
+      <Text style={[styles.star, glyph, { color: emptyColor }]}>★</Text>
       {fill > 0 && (
         <View style={[styles.fillClip, { width: size * fill, height: size }]}>
-          <Text style={[styles.star, styles.filled, { width: size, fontSize: size, lineHeight: size }]}>★</Text>
+          <Text style={[styles.star, glyph, { color: filledColor }]}>★</Text>
         </View>
       )}
     </View>
@@ -27,7 +32,13 @@ function Star({ fill, size }: { fill: number; size: number }) {
 }
 
 // Tap or drag across the stars to rate in half steps. Tapping the current value clears it.
-export function StarRating({ value, size = 28, onChange }: Props) {
+export function StarRating({
+  value,
+  size = 28,
+  filledColor = CinemaColors.brass,
+  emptyColor = CinemaColors.hairline,
+  onChange,
+}: Props) {
   // Value as of the last change within the current gesture
   const lastValue = useRef<number | null>(value);
 
@@ -47,7 +58,13 @@ export function StarRating({ value, size = 28, onChange }: Props) {
     // Children ignore touches so locationX is always relative to the whole row
     <View style={styles.row} pointerEvents="none">
       {Array.from({ length: STAR_COUNT }, (_, i) => (
-        <Star key={i} size={size} fill={Math.min(1, Math.max(0, (value ?? 0) - i))} />
+        <Star
+          key={i}
+          size={size}
+          fill={Math.min(1, Math.max(0, (value ?? 0) - i))}
+          filledColor={filledColor}
+          emptyColor={emptyColor}
+        />
       ))}
     </View>
   );
@@ -78,12 +95,6 @@ const styles = StyleSheet.create({
   star: {
     position: 'absolute',
     textAlign: 'center',
-  },
-  empty: {
-    color: CinemaColors.hairline,
-  },
-  filled: {
-    color: CinemaColors.brass,
   },
   fillClip: {
     position: 'absolute',

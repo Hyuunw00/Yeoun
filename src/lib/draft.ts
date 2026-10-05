@@ -1,12 +1,13 @@
 import Storage from 'expo-sqlite/kv-store';
 
-import type { Category } from '@/lib/db';
+import type { Category, Quote } from '@/lib/db';
 
 export type Draft = {
   body: string;
   experiencedOn: string;
   episode?: string;
   rating?: number | null;
+  quotes?: Quote[];
 };
 
 const key = (category: Category, externalId: string) => `draft:${category}:${externalId}`;
