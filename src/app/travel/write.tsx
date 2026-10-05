@@ -3,7 +3,16 @@ import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AutoGrowInput } from '@/components/auto-grow-input';
@@ -51,6 +60,8 @@ export default function TravelWriteScreen() {
 
   // Reloaded on focus, so setting home from here shows up on return
   const [home, setHome] = useState<HomeCity | null>(null);
+  // The geocoder may name a city in English ("Fukuoka"), so a new city's name is editable
+  const [cityName, setCityName] = useState(city?.name ?? '');
   useFocusEffect(
     useCallback(() => {
       loadHome().then(setHome);
@@ -62,20 +73,21 @@ export default function TravelWriteScreen() {
     externalId: id,
     recordId,
     workId,
-    newWork: city
-      ? {
-          category: 'travel',
-          externalId: id,
-          title: city.name,
-          subtitle: cityLine(city.region, city.country) || null,
-          year: null,
-          releaseDate: null,
-          imageUrl: null,
-          latitude: city.latitude,
-          longitude: city.longitude,
-          countryCode: city.countryCode,
-        }
-      : null,
+    newWork:
+      city && cityName.trim()
+        ? {
+            category: 'travel',
+            externalId: id,
+            title: cityName.trim(),
+            subtitle: cityLine(city.region, city.country) || null,
+            year: null,
+            releaseDate: null,
+            imageUrl: null,
+            latitude: city.latitude,
+            longitude: city.longitude,
+            countryCode: city.countryCode,
+          }
+        : null,
     origin: home ? JSON.stringify(home) : null,
     onSaved: (isEdit) => {
       if (isEdit || from === 'work') router.back();
@@ -86,7 +98,7 @@ export default function TravelWriteScreen() {
   const { isEdit, savedWork, saving, canSave } = editor;
 
   const ready = isEdit ? !!savedWork : !!city;
-  const name = (isEdit ? savedWork?.title : city?.name) ?? '';
+  const name = (isEdit ? savedWork?.title : cityName) ?? '';
   const countryCode = (isEdit ? savedWork?.countryCode : city?.countryCode) ?? null;
   // An edited record keeps the home it left from; a new one leaves from the current home
   const origin = isEdit ? parseOrigin(editor.savedOrigin) : home;
@@ -139,6 +151,19 @@ export default function TravelWriteScreen() {
                 dates={formatTripDates(editor.experiencedOn, editor.endedOn)}
                 length={length}
               />
+              {!isEdit && (
+                <View style={styles.nameField}>
+                  <Text style={styles.label}>도시 이름</Text>
+                  <TextInput
+                    style={styles.nameInput}
+                    value={cityName}
+                    onChangeText={setCityName}
+                    placeholder="도시 이름"
+                    placeholderTextColor={MapColors.inkDim}
+                    selectionColor={MapColors.pin}
+                  />
+                </View>
+              )}
               {!isEdit && !home && (
                 <Pressable
                   onPress={() => router.push({ pathname: '/travel/search', params: { mode: 'home' } })}
@@ -299,6 +324,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: MapColors.inkDim,
     textDecorationLine: 'underline',
+  },
+  nameField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  nameInput: {
+    flex: 1,
+    height: 32,
+    paddingVertical: 0,
+    fontFamily: LibraryFonts.serifBold,
+    fontSize: 16,
+    color: MapColors.ink,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: MapColors.coast,
   },
   section: {
     gap: 8,

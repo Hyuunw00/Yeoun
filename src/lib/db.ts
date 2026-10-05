@@ -252,7 +252,11 @@ export type Work = {
 
 export type WorkSummary = Work & {
   lastExperiencedOn: string;
+  // Last day of the latest record, when it spans several days (travel)
+  lastEndedOn: string | null;
   lastRating: number | null;
+  // A photo to show for the work: the chosen cover, else the latest record's first photo
+  photo: string | null;
 };
 
 export type RecordEntry = {
@@ -312,7 +316,16 @@ export function listWorks(db: SQLiteDatabase, category: Category, query = '') {
   return db.getAllAsync<WorkSummary>(
     `SELECT ${WORK_COLUMNS}, MAX(r.experienced_on) AS lastExperiencedOn,
        (SELECT rating FROM records WHERE work_id = w.id
-        ORDER BY experienced_on DESC, id DESC LIMIT 1) AS lastRating
+        ORDER BY experienced_on DESC, id DESC LIMIT 1) AS lastRating,
+       (SELECT ended_on FROM records WHERE work_id = w.id
+        ORDER BY experienced_on DESC, id DESC LIMIT 1) AS lastEndedOn,
+       -- Two lookups: SQLite can't read the outer w.cover_photo inside a subquery's ORDER BY
+       COALESCE(
+         (SELECT p.file_name FROM record_photos p JOIN records pr ON pr.id = p.record_id
+          WHERE pr.work_id = w.id AND p.file_name = w.cover_photo LIMIT 1),
+         (SELECT p.file_name FROM record_photos p JOIN records pr ON pr.id = p.record_id
+          WHERE pr.work_id = w.id ORDER BY pr.experienced_on DESC, pr.id DESC, p.position LIMIT 1)
+       ) AS photo
      FROM works w
      JOIN records r ON r.work_id = w.id
      WHERE w.category = ?

@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -15,10 +16,31 @@ import { MapColors } from '@/components/travel/theme';
 import { asTransport } from '@/components/travel/transport';
 import { WorldMap } from '@/components/travel/world-map';
 import { useDb } from '@/lib/database';
+import { formatTripDates, tripLength } from '@/lib/date';
 import { listTravelRoutes, listWorks, type TravelRoute, type WorkSummary } from '@/lib/db';
 import { loadHome, parseOrigin, type HomeCity } from '@/lib/home';
+import { photoUri } from '@/lib/photos';
 
-const formatDate = (date: string) => date.replaceAll('-', '.');
+// The latest trip's dates, with its length when it spans several days
+const latestTrip = (work: WorkSummary) =>
+  [formatTripDates(work.lastExperiencedOn, work.lastEndedOn), tripLength(work.lastExperiencedOn, work.lastEndedOn)]
+    .filter(Boolean)
+    .join(' · ');
+
+// A small photo print of the city, or its country code on blank paper
+function Thumb({ work, size }: { work: WorkSummary; size: number }) {
+  return (
+    <View style={[styles.thumb, { width: size, height: size }]}>
+      {work.photo ? (
+        <Image source={photoUri(work.photo)} style={styles.thumbImage} contentFit="cover" />
+      ) : (
+        <View style={[styles.thumbImage, styles.thumbBlank]}>
+          <Text style={styles.thumbCode}>{work.countryCode ?? '—'}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function openCity(id: number) {
   router.push({ pathname: '/travel/work/[id]', params: { id } });
@@ -130,11 +152,13 @@ export default function TravelScreen() {
             ListEmptyComponent={<Text style={styles.empty}>아직 다녀온 도시가 없어요</Text>}
             renderItem={({ item }) => (
               <Pressable style={styles.row} onPress={() => openCity(item.id)}>
+                <Thumb work={item} size={60} />
                 <View style={styles.rowMain}>
                   <Text style={styles.rowName}>{item.title}</Text>
                   {!!item.subtitle && <Text style={styles.meta}>{item.subtitle}</Text>}
+                  <Text style={styles.date}>{latestTrip(item)}</Text>
                 </View>
-                <Text style={styles.date}>{formatDate(item.lastExperiencedOn)}</Text>
+                <SymbolView name="chevron.right" tintColor={MapColors.inkDim} size={14} />
               </Pressable>
             )}
           />
@@ -204,14 +228,13 @@ export default function TravelScreen() {
           exiting={FadeOutDown.duration(160)}
           style={styles.cardWrap}>
           <Pressable style={styles.card} onPress={() => openCity(selected.id)}>
+            <Thumb work={selected} size={72} />
             <View style={styles.rowMain}>
               <Text style={styles.cardName}>{selected.title}</Text>
               {!!selected.subtitle && <Text style={styles.meta}>{selected.subtitle}</Text>}
+              <Text style={styles.date}>{latestTrip(selected)}</Text>
             </View>
-            <View style={styles.cardRight}>
-              <Text style={styles.date}>{formatDate(selected.lastExperiencedOn)}</Text>
-              <SymbolView name="chevron.right" tintColor={MapColors.inkDim} size={14} />
-            </View>
+            <SymbolView name="chevron.right" tintColor={MapColors.inkDim} size={14} />
           </Pressable>
         </Animated.View>
       )}
@@ -365,9 +388,9 @@ const styles = StyleSheet.create({
     color: MapColors.inkDim,
   },
   date: {
-    fontFamily: CinemaFonts.sign,
-    fontSize: 15,
-    letterSpacing: 1,
+    marginTop: 2,
+    fontFamily: LibraryFonts.serif,
+    fontSize: 12,
     color: MapColors.inkDim,
   },
   cardWrap: {
@@ -390,14 +413,33 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
+  // White-bordered print, like a photo pinned to the map
+  thumb: {
+    padding: 3,
+    backgroundColor: MapColors.paper,
+    transform: [{ rotate: '-2deg' }],
+    shadowColor: '#3b2c1e',
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  thumbImage: {
+    flex: 1,
+  },
+  thumbBlank: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: MapColors.land,
+  },
+  thumbCode: {
+    fontFamily: CinemaFonts.sign,
+    fontSize: 16,
+    letterSpacing: 1,
+    color: MapColors.inkDim,
+  },
   cardName: {
     fontFamily: LibraryFonts.serifBold,
     fontSize: 19,
     color: MapColors.ink,
-  },
-  cardRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
 });
