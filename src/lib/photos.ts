@@ -10,14 +10,18 @@ const JPEG_QUALITY = 0.8;
 
 // Only file names are stored in the DB because the app container path
 // on iOS can change between installs.
-function photoDir() {
+export function photoDir() {
   const dir = new Directory(Paths.document, 'photos');
   if (!dir.exists) dir.create({ idempotent: true });
   return dir;
 }
 
+export function photoFile(fileName: string) {
+  return new File(photoDir(), fileName);
+}
+
 export function photoUri(fileName: string) {
-  return new File(photoDir(), fileName).uri;
+  return photoFile(fileName).uri;
 }
 
 // Picks photos and returns resized temporary copies (not yet persisted)

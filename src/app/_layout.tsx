@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { CinemaColors } from '@/components/cinema/theme';
+import { startAutoBackup } from '@/lib/auto-backup';
 import { database } from '@/lib/database';
 import { migrate } from '@/lib/db';
 
@@ -22,7 +23,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     migrate(database)
-      .then(() => setDbState('ready'))
+      .then(() => {
+        setDbState('ready');
+        startAutoBackup(database);
+      })
       .catch((e) => {
         console.error('Database migration failed', e);
         setDbState('error');
@@ -53,6 +57,7 @@ export default function RootLayout() {
         <Stack.Screen name="movie/work/[id]" options={{ animation: 'fade' }} />
         {/* Fade in as the book comes off the shelf and opens */}
         <Stack.Screen name="book/work/[id]" options={{ animation: 'fade' }} />
+        <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
       </Stack>
     </>
   );

@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { emitDataChanged } from '@/lib/changes';
 import { deletePhotoFiles } from '@/lib/photos';
 
 export type Category = 'movie' | 'book' | 'music' | 'travel';
@@ -178,6 +179,7 @@ export async function saveRecord(
     await insertPhotos(db, result.lastInsertRowId, photos);
     await insertQuotes(db, result.lastInsertRowId, quotes);
   });
+  emitDataChanged();
 }
 
 export type Work = {
@@ -298,6 +300,7 @@ export async function setWorkDetails(
     details.credits,
     workId,
   );
+  emitDataChanged();
 }
 
 export async function getRecord(db: SQLiteDatabase, id: number) {
@@ -336,6 +339,7 @@ export async function updateRecord(
   });
   // Files are removed only after the DB change has committed
   deletePhotoFiles(previous.filter((name) => !photos.includes(name)));
+  emitDataChanged();
 }
 
 // Removes the work too once its last record is gone. Returns true in that case.
@@ -357,6 +361,7 @@ export async function deleteRecord(db: SQLiteDatabase, id: number) {
     workRemoved = result.changes > 0;
   });
   deletePhotoFiles(photos);
+  emitDataChanged();
   return workRemoved;
 }
 
@@ -365,4 +370,5 @@ export async function deleteWork(db: SQLiteDatabase, id: number) {
   const photos = await photoNames(db, 'r.work_id', id);
   await db.runAsync('DELETE FROM works WHERE id = ?', id);
   deletePhotoFiles(photos);
+  emitDataChanged();
 }

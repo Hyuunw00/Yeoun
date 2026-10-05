@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Link, router, useFocusEffect } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
@@ -96,6 +97,9 @@ export default function LibraryScreen() {
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={styles.header}>
+              <Pressable style={styles.settings} onPress={() => router.push('/settings')} hitSlop={12}>
+                <SymbolView name="gearshape" tintColor={LibraryColors.brassDim} size={20} />
+              </Pressable>
               <View style={styles.plate}>
                 <Text style={styles.plateSub}>YEOUN LIBRARY</Text>
                 <Text style={styles.plateTitle}>서재</Text>
@@ -178,6 +182,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 8 },
+  },
+  settings: {
+    alignSelf: 'flex-end',
+    marginBottom: -8,
   },
   header: {
     paddingTop: 16,

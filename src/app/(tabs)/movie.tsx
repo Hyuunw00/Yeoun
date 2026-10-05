@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Link, router, useFocusEffect } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useDb } from '@/lib/database';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -133,6 +134,9 @@ export default function CinemaLobbyScreen() {
           columnWrapperStyle={styles.row}
           ListHeaderComponent={
             <View style={styles.header}>
+              <Pressable style={styles.settings} onPress={() => router.push('/settings')} hitSlop={12}>
+                <SymbolView name="gearshape" tintColor={CinemaColors.brassDim} size={20} />
+              </Pressable>
               <MarqueeSign>
                 <Text style={styles.venue}>YEOUN CINEMA</Text>
                 <Text style={styles.marquee}>NOW SHOWING</Text>
@@ -210,6 +214,10 @@ const styles = StyleSheet.create({
   },
   row: {
     gap: COLUMN_GAP,
+  },
+  settings: {
+    alignSelf: 'flex-end',
+    marginBottom: -8,
   },
   header: {
     paddingTop: 16,

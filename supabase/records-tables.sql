@@ -1,0 +1,68 @@
+-- Yeoun: server mirror of the phone's SQLite tables, one copy per user.
+-- The phone stays the source of truth; `id` is the phone's local row id,
+-- unique per user. Applied manually in the Supabase SQL editor.
+
+create table if not exists public.works (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id bigint not null,
+  category text not null,
+  external_id text not null,
+  title text not null,
+  subtitle text,
+  year text,
+  image_url text,
+  created_at text not null,
+  release_date text,
+  backdrop_url text,
+  credits text,
+  primary key (user_id, id)
+);
+
+create table if not exists public.records (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id bigint not null,
+  work_id bigint not null,
+  body text not null,
+  experienced_on text not null,
+  created_at text not null,
+  updated_at text not null,
+  episode text,
+  rating real,
+  primary key (user_id, id)
+);
+
+create table if not exists public.record_photos (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id bigint not null,
+  record_id bigint not null,
+  file_name text not null,
+  position integer not null,
+  primary key (user_id, id)
+);
+
+create table if not exists public.record_quotes (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id bigint not null,
+  record_id bigint not null,
+  quote text not null,
+  page text,
+  note text,
+  position integer not null,
+  primary key (user_id, id)
+);
+
+-- Every user reads and writes only their own rows
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['works', 'records', 'record_photos', 'record_quotes'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists "Own rows" on public.%I', t);
+    execute format(
+      'create policy "Own rows" on public.%I for all to authenticated
+         using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()))',
+      t
+    );
+  end loop;
+end $$;
