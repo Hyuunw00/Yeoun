@@ -37,7 +37,7 @@ beforeEach(() => {
 describe('migrate', () => {
   it('sets connection pragmas outside any transaction', async () => {
     const { db, sqlite } = createFakeDb();
-    db.getFirstAsync.mockResolvedValueOnce({ user_version: 6 });
+    db.getFirstAsync.mockResolvedValueOnce({ user_version: 7 });
 
     await migrate(sqlite);
 
@@ -50,9 +50,9 @@ describe('migrate', () => {
 
     await migrate(sqlite);
 
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(6);
+    expect(db.withExclusiveTransactionAsync).toHaveBeenCalledTimes(7);
     const sql = sqlOf(tx.execAsync);
-    expect(sql).toHaveLength(12);
+    expect(sql).toHaveLength(14);
     expect(sql[0]).toContain('CREATE TABLE works');
     expect(sql[0]).toContain('CREATE TABLE records');
     expect(sql[1]).toBe('PRAGMA user_version = 1');
@@ -66,6 +66,9 @@ describe('migrate', () => {
     expect(sql[9]).toBe('PRAGMA user_version = 5');
     expect(sql[10]).toContain('CREATE TABLE record_quotes');
     expect(sql[11]).toBe('PRAGMA user_version = 6');
+    expect(sql[12]).toContain('ADD COLUMN backdrop_url');
+    expect(sql[12]).toContain('ADD COLUMN credits');
+    expect(sql[13]).toBe('PRAGMA user_version = 7');
   });
 
   it('treats a missing user_version row as version 0', async () => {
@@ -75,7 +78,7 @@ describe('migrate', () => {
     await migrate(sqlite);
 
     expect(sqlOf(tx.execAsync)[0]).toContain('CREATE TABLE works');
-    expect(sqlOf(tx.execAsync).at(-1)).toBe('PRAGMA user_version = 6');
+    expect(sqlOf(tx.execAsync).at(-1)).toBe('PRAGMA user_version = 7');
   });
 
   it('only runs the remaining steps from an intermediate version', async () => {
@@ -91,6 +94,8 @@ describe('migrate', () => {
       'PRAGMA user_version = 5',
       expect.stringContaining('CREATE TABLE record_quotes'),
       'PRAGMA user_version = 6',
+      expect.stringContaining('ADD COLUMN backdrop_url'),
+      'PRAGMA user_version = 7',
     ]);
   });
 
@@ -110,7 +115,7 @@ describe('migrate', () => {
   });
 
   it('does not run any step when already at or above the latest version', async () => {
-    for (const version of [6, 9]) {
+    for (const version of [7, 9]) {
       const { db, sqlite } = createFakeDb();
       db.getFirstAsync.mockResolvedValueOnce({ user_version: version });
 

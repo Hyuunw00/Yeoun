@@ -73,6 +73,9 @@ const MIGRATIONS = [
      position INTEGER NOT NULL
    );
    CREATE INDEX record_quotes_record_id ON record_quotes(record_id);`,
+  // Wide still and credits (JSON) fetched once for the theater screen
+  `ALTER TABLE works ADD COLUMN backdrop_url TEXT;
+   ALTER TABLE works ADD COLUMN credits TEXT;`,
 ];
 
 export async function migrate(db: SQLiteDatabase) {
@@ -186,6 +189,9 @@ export type Work = {
   year: string | null;
   releaseDate: string | null;
   imageUrl: string | null;
+  backdropUrl: string | null;
+  // JSON-encoded credits; null until fetched
+  credits: string | null;
 };
 
 export type WorkSummary = Work & {
@@ -232,7 +238,8 @@ async function attachPhotos(db: SQLiteDatabase, rows: RecordRow[]): Promise<Reco
 }
 
 const WORK_COLUMNS = `w.id, w.category, w.external_id AS externalId, w.title, w.subtitle,
-  w.year, w.release_date AS releaseDate, w.image_url AS imageUrl`;
+  w.year, w.release_date AS releaseDate, w.image_url AS imageUrl,
+  w.backdrop_url AS backdropUrl, w.credits`;
 
 // Most recently experienced first. `query` matches titles, record bodies and quotes.
 export function listWorks(db: SQLiteDatabase, category: Category, query = '') {
@@ -276,8 +283,21 @@ export async function listRecords(db: SQLiteDatabase, workId: number) {
   return attachPhotos(db, rows);
 }
 
-export async function setReleaseDate(db: SQLiteDatabase, workId: number, releaseDate: string) {
-  await db.runAsync('UPDATE works SET release_date = ? WHERE id = ?', releaseDate, workId);
+// Details fetched after the work was saved (release date, wide still, credits)
+export async function setWorkDetails(
+  db: SQLiteDatabase,
+  workId: number,
+  details: { releaseDate: string | null; backdropUrl: string | null; credits: string },
+) {
+  await db.runAsync(
+    `UPDATE works
+     SET release_date = COALESCE(?, release_date), backdrop_url = ?, credits = ?
+     WHERE id = ?`,
+    details.releaseDate,
+    details.backdropUrl,
+    details.credits,
+    workId,
+  );
 }
 
 export async function getRecord(db: SQLiteDatabase, id: number) {

@@ -102,6 +102,52 @@ export function isSeries(externalId: string) {
   return parseExternalId(externalId).mediaType === 'tv';
 }
 
+export type Credits = {
+  // Directors for a movie, creators for a series
+  directors: string[];
+  cast: { name: string; character: string }[];
+};
+
+export type TitleDetails = {
+  releaseDate: string | null;
+  backdropPath: string | null;
+  credits: Credits;
+};
+
+const CAST_LIMIT = 8;
+
+type DetailsResponse = {
+  release_date?: string;
+  first_air_date?: string;
+  backdrop_path: string | null;
+  created_by?: { name: string }[];
+  credits: {
+    cast: { name: string; character: string }[];
+    crew: { name: string; job: string }[];
+  };
+};
+
+// Release date, wide still and the people behind it, in one request
+export async function getTitleDetails(mediaType: MediaType, id: number, signal?: AbortSignal): Promise<TitleDetails> {
+  const data = await request<DetailsResponse>(`/${mediaType}/${id}`, { append_to_response: 'credits' }, signal);
+  const directors =
+    mediaType === 'movie'
+      ? data.credits.crew.filter((c) => c.job === 'Director').map((c) => c.name)
+      : (data.created_by ?? []).map((c) => c.name);
+  return {
+    releaseDate: (mediaType === 'movie' ? data.release_date : data.first_air_date) || null,
+    backdropPath: data.backdrop_path,
+    credits: {
+      directors,
+      cast: data.credits.cast.slice(0, CAST_LIMIT).map(({ name, character }) => ({ name, character })),
+    },
+  };
+}
+
+export function backdropUrl(path: string, size: 'w780' | 'w1280' = 'w1280') {
+  return `${IMAGE_BASE_URL}/${size}${path}`;
+}
+
 export function posterUrl(path: string, size: 'w185' | 'w342' | 'w500' | 'original' = 'w185') {
   return `${IMAGE_BASE_URL}/${size}${path}`;
 }

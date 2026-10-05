@@ -1,43 +1,69 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useDb } from '@/lib/database';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActionSheetIOS, Alert, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilmGrain } from '@/components/cinema/film-grain';
 import { FilmStrip } from '@/components/cinema/film-strip';
 import { ScreenLight } from '@/components/cinema/screen-light';
-import { StarRating } from '@/components/cinema/star-rating';
 import { CinemaColors, CinemaFonts } from '@/components/cinema/theme';
-import { deleteRecord, getWork, listRecords, setReleaseDate, type RecordEntry, type Work } from '@/lib/db';
-import { getTitle, isSeries, parseExternalId } from '@/lib/tmdb';
+import { TicketStub } from '@/components/cinema/ticket-stub';
+import { useDb } from '@/lib/database';
+import { deleteRecord, getWork, listRecords, setWorkDetails, type RecordEntry, type Work } from '@/lib/db';
+import { backdropUrl, getTitleDetails, isSeries, parseExternalId, type Credits } from '@/lib/tmdb';
 
 const CREDIT_STAGGER_MS = 180;
+// Cinemascope bars above and below the picture
+const LETTERBOX = 34;
+const TICKET_TILTS = [-3, 2, -1.5, 3];
+
+function parseCredits(json: string | null): Credits | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed?.directors) && Array.isArray(parsed?.cast) ? (parsed as Credits) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function MovieWorkScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const db = useDb();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [work, setWork] = useState<Work | null>(null);
   const [records, setRecords] = useState<RecordEntry[]>([]);
+  // Avoids a second TMDB request when the screen refocuses before the first returns
+  const fetchingDetails = useRef(false);
 
   const load = useCallback(() => {
     const workId = Number(id);
-    getWork(db, workId).then(async (loaded) => {
-      setWork(loaded);
-      // Works saved before release dates were stored: fill it in once from TMDB
-      if (loaded && !loaded.releaseDate) {
-        const { mediaType, id: tmdbId } = parseExternalId(loaded.externalId);
-        const title = await getTitle(mediaType, tmdbId).catch(() => null);
-        if (title?.releaseDate) {
-          await setReleaseDate(db, workId, title.releaseDate);
-          setWork({ ...loaded, releaseDate: title.releaseDate });
+    getWork(db, workId)
+      .then(async (loaded) => {
+        setWork(loaded);
+        // Fetch the wide still and credits from TMDB once, then keep them in the DB
+        if (!loaded || loaded.credits !== null || fetchingDetails.current) return;
+        fetchingDetails.current = true;
+        try {
+          const { mediaType, id: tmdbId } = parseExternalId(loaded.externalId);
+          const details = await getTitleDetails(mediaType, tmdbId).catch(() => null);
+          if (!details) return;
+          await setWorkDetails(db, workId, {
+            releaseDate: details.releaseDate,
+            backdropUrl: details.backdropPath ? backdropUrl(details.backdropPath) : null,
+            credits: JSON.stringify(details.credits),
+          });
+          // Re-read rather than patching the snapshot, which may be stale by now
+          setWork(await getWork(db, workId));
+        } finally {
+          fetchingDetails.current = false;
         }
-      }
-    });
+      })
+      .catch(() => {});
     listRecords(db, workId).then(setRecords);
   }, [db, id]);
 
@@ -89,90 +115,124 @@ export default function MovieWorkScreen() {
   const rerecord = () =>
     work && router.push({ pathname: '/movie/write', params: { id: work.externalId, from: 'work' } });
 
+  const series = !!work && isSeries(work.externalId);
+  const credits = parseCredits(work?.credits ?? null);
+  const screenWidth = width - 32;
+
   return (
     <View style={styles.container}>
       <ScreenLight />
 
-      <SafeAreaView style={styles.flex} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.headerButton}>로비로</Text>
-          </Pressable>
-        </View>
-
-        <FlatList
-          data={records}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.credits}
-          ListHeaderComponent={
-            work && (
-              <Animated.View entering={FadeIn.duration(900)} style={styles.screen}>
-                {work.imageUrl ? (
-                  <Image
-                    source={work.imageUrl}
-                    style={[styles.poster, { width: width * 0.5 }]}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <View style={[styles.poster, { width: width * 0.5 }]} />
-                )}
-                <Text style={styles.title}>{work.title}</Text>
-                <Text style={styles.subtitle}>
-                  {[
-                    isSeries(work.externalId) && 'SERIES',
-                    work.subtitle,
-                    work.releaseDate
-                      ? `${isSeries(work.externalId) ? '첫 방영' : '개봉'} ${work.releaseDate.replaceAll('-', '.')}`
-                      : work.year,
-                  ]
-                    .filter(Boolean)
-                    .join('  ·  ')}
-                </Text>
-              </Animated.View>
-            )
-          }
-          // Each record rolls up like an end credit
-          renderItem={({ item, index }) => (
-            <Animated.View entering={FadeInDown.delay(400 + index * CREDIT_STAGGER_MS).duration(800)}>
-              <Pressable
-                style={styles.credit}
-                onPress={() => editRecord(item)}
-                onLongPress={() => openRecordMenu(item)}>
-                <Text style={styles.creditLabel}>
-                  {isSeries(work?.externalId ?? '') ? `${index + 1}번째 기록` : `${index + 1}회차 관람`}
-                </Text>
-                <Text style={styles.creditDate}>{item.experiencedOn.replaceAll('-', '.')}</Text>
-                {!!item.episode && <Text style={styles.creditEpisode}>{item.episode}</Text>}
-                {item.rating !== null && (
-                  <View style={styles.creditRating}>
-                    <StarRating value={item.rating} size={14} />
-                  </View>
-                )}
-                {!!item.body && <Text style={styles.creditBody}>{item.body}</Text>}
-                {item.photos.length > 0 && (
-                  <View style={styles.creditPhotos}>
-                    <FilmStrip photos={item.photos} />
-                  </View>
-                )}
+      <FlatList
+        data={records}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={[
+          styles.credits,
+          { paddingTop: insets.top + LETTERBOX + 16, paddingBottom: LETTERBOX + 80 },
+        ]}
+        ListHeaderComponent={
+          work && (
+            <Animated.View entering={FadeIn.duration(900)} style={styles.screen}>
+              {/* The wide still fills the screen; fall back to the poster */}
+              {work.backdropUrl ? (
+                <Image
+                  source={work.backdropUrl}
+                  style={[styles.backdrop, { width: screenWidth, height: (screenWidth * 9) / 16 }]}
+                  contentFit="cover"
+                  transition={400}
+                />
+              ) : work.imageUrl ? (
+                <Image source={work.imageUrl} style={[styles.poster, { width: width * 0.5 }]} contentFit="cover" />
+              ) : (
+                <View style={[styles.poster, { width: width * 0.5 }]} />
+              )}
+              <Text style={styles.title}>{work.title}</Text>
+              <Text style={styles.subtitle}>
+                {[
+                  series && 'SERIES',
+                  work.subtitle,
+                  work.releaseDate
+                    ? `${series ? '첫 방영' : '개봉'} ${work.releaseDate.replaceAll('-', '.')}`
+                    : work.year,
+                ]
+                  .filter(Boolean)
+                  .join('  ·  ')}
+              </Text>
+            </Animated.View>
+          )
+        }
+        // Each viewing is a ticket stub followed by what I wrote, rolling up like an end credit
+        renderItem={({ item, index }) => (
+          <Animated.View entering={FadeInDown.delay(400 + index * CREDIT_STAGGER_MS).duration(800)}>
+            <Pressable
+              style={styles.credit}
+              onPress={() => editRecord(item)}
+              onLongPress={() => openRecordMenu(item)}>
+              <TicketStub
+                label={series ? `${index + 1}번째` : `${index + 1}회차`}
+                date={item.experiencedOn}
+                episode={item.episode}
+                rating={item.rating}
+                tilt={TICKET_TILTS[index % TICKET_TILTS.length]}
+              />
+              {!!item.body && <Text style={styles.creditBody}>{item.body}</Text>}
+              {item.photos.length > 0 && (
+                <View style={styles.creditPhotos}>
+                  <FilmStrip photos={item.photos} />
+                </View>
+              )}
+            </Pressable>
+          </Animated.View>
+        )}
+        ListFooterComponent={
+          work && (
+            <Animated.View
+              entering={FadeIn.delay(400 + records.length * CREDIT_STAGGER_MS).duration(800)}
+              style={styles.footer}>
+              {credits && credits.directors.length > 0 && (
+                <View style={styles.role}>
+                  <Text style={styles.roleTitle}>{series ? '크리에이터' : '감독'}</Text>
+                  {credits.directors.map((name) => (
+                    <Text key={name} style={styles.roleName}>
+                      {name}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              {credits && credits.cast.length > 0 && (
+                <View style={styles.role}>
+                  <Text style={styles.roleTitle}>출연</Text>
+                  {/* Character on the left, actor on the right, like real end credits */}
+                  {credits.cast.map((c, i) => (
+                    <View key={`${i}-${c.name}`} style={styles.castRow}>
+                      <Text style={styles.castCharacter} numberOfLines={1}>
+                        {c.character}
+                      </Text>
+                      <Text style={styles.castName} numberOfLines={1}>
+                        {c.name}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.theEnd}>THE END</Text>
+              <Pressable onPress={rerecord} style={styles.rerecord}>
+                <Text style={styles.rerecordText}>다시 기록하기</Text>
               </Pressable>
             </Animated.View>
-          )}
-          ListFooterComponent={
-            work && (
-              <Animated.View
-                entering={FadeIn.delay(400 + records.length * CREDIT_STAGGER_MS).duration(800)}
-                style={styles.footer}>
-                <Text style={styles.theEnd}>THE END</Text>
-                <Pressable onPress={rerecord} style={styles.rerecord}>
-                  <Text style={styles.rerecordText}>다시 기록하기</Text>
-                </Pressable>
-              </Animated.View>
-            )
-          }
-        />
-      </SafeAreaView>
+          )
+        }
+      />
 
       <FilmGrain opacity={0.06} />
+
+      {/* Letterbox bars; the top one also holds the way back */}
+      <View style={[styles.bar, { top: 0, height: insets.top + LETTERBOX }]}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back}>
+          <Text style={styles.headerButton}>로비로</Text>
+        </Pressable>
+      </View>
+      <View style={[styles.bar, { bottom: 0, height: LETTERBOX }]} pointerEvents="none" />
     </View>
   );
 }
@@ -182,12 +242,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: CinemaColors.theater,
   },
-  flex: {
-    flex: 1,
+  bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
+    backgroundColor: '#000',
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+  back: {
+    alignSelf: 'flex-start',
+    marginLeft: 20,
+    marginBottom: 9,
   },
   headerButton: {
     fontFamily: CinemaFonts.serif,
@@ -195,13 +260,18 @@ const styles = StyleSheet.create({
     color: CinemaColors.textDim,
   },
   credits: {
-    paddingHorizontal: 32,
-    paddingBottom: 80,
+    paddingHorizontal: 16,
   },
   screen: {
     alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 56,
+    paddingBottom: 48,
+  },
+  backdrop: {
+    backgroundColor: '#111',
+    shadowColor: CinemaColors.screenLight,
+    shadowOpacity: 0.35,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 0 },
   },
   poster: {
     aspectRatio: 2 / 3,
@@ -227,32 +297,11 @@ const styles = StyleSheet.create({
   },
   credit: {
     alignItems: 'center',
+    gap: 22,
     marginBottom: 56,
-  },
-  creditLabel: {
-    fontFamily: CinemaFonts.serif,
-    fontSize: 11,
-    letterSpacing: 3,
-    color: CinemaColors.textDim,
-  },
-  creditDate: {
-    marginTop: 4,
-    fontFamily: CinemaFonts.sign,
-    fontSize: 22,
-    letterSpacing: 2,
-    color: CinemaColors.brass,
-  },
-  creditEpisode: {
-    marginTop: 4,
-    fontFamily: CinemaFonts.serif,
-    fontSize: 12,
-    color: CinemaColors.brassDim,
-  },
-  creditRating: {
-    marginTop: 8,
+    paddingHorizontal: 16,
   },
   creditBody: {
-    marginTop: 18,
     textAlign: 'center',
     fontFamily: CinemaFonts.serif,
     fontSize: 16,
@@ -261,14 +310,48 @@ const styles = StyleSheet.create({
   },
   creditPhotos: {
     alignSelf: 'stretch',
-    marginTop: 20,
   },
   footer: {
     alignItems: 'center',
     marginTop: 8,
     gap: 28,
   },
+  role: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 6,
+  },
+  roleTitle: {
+    marginBottom: 4,
+    fontFamily: CinemaFonts.serif,
+    fontSize: 11,
+    letterSpacing: 3,
+    color: CinemaColors.textDim,
+  },
+  roleName: {
+    fontFamily: CinemaFonts.serifBold,
+    fontSize: 15,
+    color: CinemaColors.text,
+  },
+  castRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  castCharacter: {
+    flex: 1,
+    textAlign: 'right',
+    fontFamily: CinemaFonts.serif,
+    fontSize: 13,
+    color: CinemaColors.textDim,
+  },
+  castName: {
+    flex: 1,
+    fontFamily: CinemaFonts.serif,
+    fontSize: 13,
+    color: CinemaColors.text,
+  },
   theEnd: {
+    marginTop: 16,
     fontFamily: CinemaFonts.sign,
     fontSize: 28,
     letterSpacing: 6,
