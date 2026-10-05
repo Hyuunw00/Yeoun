@@ -2,7 +2,15 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
+import type { Category } from '@/lib/db';
+
 export const MAX_PHOTOS_PER_RECORD = 3;
+// A trip collects far more photos than a movie or a book
+export const MAX_TRAVEL_PHOTOS = 30;
+
+export function maxPhotos(category: Category) {
+  return category === 'travel' ? MAX_TRAVEL_PHOTOS : MAX_PHOTOS_PER_RECORD;
+}
 
 // Longest side after resizing; keeps files small for storage and future backup
 const MAX_DIMENSION = 1600;

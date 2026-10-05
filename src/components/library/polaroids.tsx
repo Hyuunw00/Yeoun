@@ -33,8 +33,10 @@ export function Polaroids({ photos }: { photos: string[] }) {
 }
 
 const styles = StyleSheet.create({
+  // Wraps onto more lines for a trip's worth of photos
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     paddingVertical: 6,
   },

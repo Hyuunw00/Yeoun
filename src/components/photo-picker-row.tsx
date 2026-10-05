@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { MAX_PHOTOS_PER_RECORD } from '@/lib/photos';
 import type { PhotoItem } from '@/lib/use-record-editor';
@@ -9,14 +9,28 @@ type Props = {
   picking: boolean;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  limit?: number;
   colors: { border: string; text: string; badge: string; badgeText: string };
   fontFamily: string;
 };
 
-// Thumbnails of attached photos with remove badges, plus an add tile up to the limit
-export function PhotoPickerRow({ photos, picking, onAdd, onRemove, colors, fontFamily }: Props) {
+// Thumbnails of attached photos with remove badges, plus an add tile up to the limit.
+// Scrolls sideways once a trip's worth of photos no longer fits the width.
+export function PhotoPickerRow({
+  photos,
+  picking,
+  onAdd,
+  onRemove,
+  colors,
+  fontFamily,
+  limit = MAX_PHOTOS_PER_RECORD,
+}: Props) {
   return (
-    <View style={styles.row}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.row}
+      style={styles.scroll}>
       {photos.map((photo, index) => (
         <View key={photo.uri} style={styles.photo}>
           <Image source={photo.uri} style={styles.image} contentFit="cover" />
@@ -28,26 +42,32 @@ export function PhotoPickerRow({ photos, picking, onAdd, onRemove, colors, fontF
           </Pressable>
         </View>
       ))}
-      {photos.length < MAX_PHOTOS_PER_RECORD && (
+      {photos.length < limit && (
         <Pressable style={[styles.photo, styles.add, { borderColor: colors.border }]} onPress={onAdd} disabled={picking}>
           {picking ? (
             <ActivityIndicator color={colors.text} />
           ) : (
             <Text style={[styles.addText, { color: colors.text, fontFamily }]}>
               사진{'\n'}
-              {photos.length}/{MAX_PHOTOS_PER_RECORD}
+              {photos.length}/{limit}
             </Text>
           )}
         </Pressable>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flexGrow: 0,
+  },
+  // Room for the remove badges poking out past the thumbnails
   row: {
     flexDirection: 'row',
     gap: 10,
+    paddingTop: 6,
+    paddingRight: 6,
   },
   photo: {
     width: 64,
