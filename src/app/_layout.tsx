@@ -1,18 +1,69 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { BebasNeue_400Regular } from '@expo-google-fonts/bebas-neue';
+import { NanumMyeongjo_400Regular, NanumMyeongjo_700Bold } from '@expo-google-fonts/nanum-myeongjo';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { CinemaColors } from '@/components/cinema/theme';
+import { database } from '@/lib/database';
+import { migrate } from '@/lib/db';
 
-SplashScreen.preventAutoHideAsync();
+export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    BebasNeue_400Regular,
+    NanumMyeongjo_400Regular,
+    NanumMyeongjo_700Bold,
+  });
+  const [dbState, setDbState] = useState<'loading' | 'ready' | 'error'>('loading');
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    migrate(database)
+      .then(() => setDbState('ready'))
+      .catch((e) => {
+        console.error('Database migration failed', e);
+        setDbState('error');
+      });
+  }, []);
+
+  if (dbState === 'error') {
+    return (
+      <View style={styles.error}>
+        <Text style={styles.errorText}>기록을 여는 중에 문제가 생겼어요.{'\n'}앱을 다시 실행해주세요.</Text>
+      </View>
+    );
+  }
+
+  if (!fontsLoaded || dbState === 'loading') return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <>
+      <StatusBar style="light" />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          // Avoid white flashes between dark screens
+          contentStyle: { backgroundColor: CinemaColors.theater },
+        }}>
+        {/* Fade in after the lobby lights go down */}
+        <Stack.Screen name="movie/work/[id]" options={{ animation: 'fade' }} />
+      </Stack>
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  error: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: CinemaColors.theater,
+  },
+  errorText: {
+    textAlign: 'center',
+    lineHeight: 22,
+    color: CinemaColors.text,
+  },
+});
