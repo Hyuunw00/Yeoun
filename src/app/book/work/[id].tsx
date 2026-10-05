@@ -2,7 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActionSheetIOS, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +24,22 @@ const INDENT = '　';
 
 const formatDate = (date: string) => date.replaceAll('-', '.');
 
+const OBI_MAX_LENGTH = 48;
+
+// First sentence of the latest review, short enough to print on the band
+function obiLine(records: RecordEntry[]) {
+  const latest = [...records].reverse().find((r) => r.body.trim());
+  if (!latest) return null;
+  const line = latest.body
+    .split('\n')
+    .map((part) => part.trim())
+    .find(Boolean);
+  if (!line) return null;
+  const sentence = line.match(/^.+?[.!?。…](?=\s|$)/)?.[0] ?? line;
+  const text = sentence.length > OBI_MAX_LENGTH ? `${sentence.slice(0, OBI_MAX_LENGTH)}…` : sentence;
+  return { text, date: latest.experiencedOn };
+}
+
 // Body set like a printed page: a raised initial, then indented paragraphs
 function Prose({ text }: { text: string }) {
   const [first, ...rest] = Array.from(text);
@@ -42,6 +58,7 @@ export default function BookWorkScreen() {
   const db = useDb();
   const [work, setWork] = useState<Work | null>(null);
   const [records, setRecords] = useState<RecordEntry[]>([]);
+  const listRef = useRef<FlatList<RecordEntry>>(null);
 
   const load = useCallback(() => {
     const workId = Number(id);
@@ -104,6 +121,13 @@ export default function BookWorkScreen() {
     router.push({ pathname: '/book/write', params: { id: work.externalId, book: JSON.stringify(book), from: 'work' } });
   }
 
+  function goToChapter(index: number) {
+    Haptics.selectionAsync();
+    listRef.current?.scrollToIndex({ index, viewOffset: 8 });
+  }
+
+  const obi = obiLine(records);
+
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
@@ -123,7 +147,13 @@ export default function BookWorkScreen() {
         </View>
 
         <FlatList
+          ref={listRef}
           data={records}
+          // Chapters have varying heights; jump near the target first, then settle on it
+          onScrollToIndexFailed={({ index, averageItemLength }) => {
+            listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
+            setTimeout(() => listRef.current?.scrollToIndex({ index, viewOffset: 8 }), 50);
+          }}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.page}
           ListHeaderComponent={
@@ -135,12 +165,37 @@ export default function BookWorkScreen() {
                   ) : (
                     <View style={styles.cover} />
                   )}
+                  {/* Obi: a paper band around the cover carrying a line from my latest review */}
+                  {obi && (
+                    <View style={styles.obi}>
+                      <Text style={styles.obiText} numberOfLines={3}>
+                        “{obi.text}”
+                      </Text>
+                      <Text style={styles.obiCredit}>나의 감상 · {formatDate(obi.date)}</Text>
+                    </View>
+                  )}
                   <View style={styles.stamp}>
                     <ExLibris />
                   </View>
                 </View>
                 <Text style={styles.title}>{work.title}</Text>
                 {!!work.subtitle && <Text style={styles.meta}>{work.subtitle}</Text>}
+
+                {records.length > 1 && (
+                  <View style={styles.toc}>
+                    <Text style={styles.tocHeading}>차례</Text>
+                    {records.map((record, i) => (
+                      <Pressable key={record.id} style={styles.tocRow} onPress={() => goToChapter(i)}>
+                        <Text style={styles.tocChapter}>제{i + 1}장</Text>
+                        {/* Dot leader between the chapter and its date */}
+                        <Text style={styles.tocLeader} numberOfLines={1}>
+                          {'·'.repeat(80)}
+                        </Text>
+                        <Text style={styles.tocDate}>{formatDate(record.experiencedOn)}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </Animated.View>
             )
           }
@@ -263,14 +318,80 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   cover: {
-    width: 120,
-    height: 174,
+    width: 150,
+    height: 218,
     marginBottom: 14,
     backgroundColor: LibraryColors.paperEdge,
     shadowColor: '#000',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 3, height: 4 },
+  },
+  obi: {
+    position: 'absolute',
+    left: -4,
+    right: -4,
+    bottom: 14,
+    minHeight: 68,
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#7c2f2a',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  obiText: {
+    textAlign: 'center',
+    fontFamily: LibraryFonts.serifBold,
+    fontSize: 10,
+    lineHeight: 15,
+    color: '#f6ecd8',
+  },
+  obiCredit: {
+    textAlign: 'center',
+    fontFamily: LibraryFonts.serif,
+    fontSize: 7,
+    letterSpacing: 1,
+    color: 'rgba(246, 236, 216, 0.7)',
+  },
+  toc: {
+    alignSelf: 'stretch',
+    gap: 10,
+    marginTop: 28,
+    paddingHorizontal: 8,
+  },
+  tocHeading: {
+    marginBottom: 6,
+    textAlign: 'center',
+    fontFamily: LibraryFonts.serifBold,
+    fontSize: 13,
+    letterSpacing: 6,
+    color: LibraryColors.ink,
+  },
+  tocRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  tocChapter: {
+    fontFamily: LibraryFonts.serif,
+    fontSize: 13,
+    color: LibraryColors.ink,
+  },
+  tocLeader: {
+    flex: 1,
+    fontFamily: LibraryFonts.serif,
+    fontSize: 11,
+    letterSpacing: 2,
+    color: LibraryColors.rule,
+  },
+  tocDate: {
+    fontFamily: LibraryFonts.serif,
+    fontSize: 12,
+    color: LibraryColors.inkDim,
   },
   stamp: {
     position: 'absolute',

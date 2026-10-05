@@ -7,6 +7,7 @@ const INK = '#3a2f24';
 const STAMP = 'rgba(160, 48, 36, 0.8)';
 const NOTCH = 14;
 const PERFORATIONS = 9;
+const DASHES = 12;
 
 type Props = {
   // e.g. "2회차" for a movie, "2번째" for a series (where 회차 means episodes)
@@ -31,6 +32,13 @@ export function TicketStub({ label, date, episode, rating, tilt }: Props) {
         <Text style={styles.date}>{date.replaceAll('-', '.')}</Text>
         {!!episode && <Text style={styles.detail}>{episode}</Text>}
         <Text style={styles.admit}>ADMIT ONE</Text>
+      </View>
+
+      {/* Dashed tear line; iOS can't dash a single border side, so draw the dashes */}
+      <View style={styles.tearLine}>
+        {Array.from({ length: DASHES }, (_, i) => (
+          <View key={i} style={styles.dash} />
+        ))}
       </View>
 
       {/* Torn perforated edge on the right */}
@@ -80,9 +88,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 2,
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(58, 47, 36, 0.25)',
-    borderStyle: 'dashed',
+  },
+  tearLine: {
+    width: 1,
+    paddingVertical: 8,
+    justifyContent: 'space-between',
+  },
+  dash: {
+    width: 1,
+    height: 4,
+    backgroundColor: 'rgba(58, 47, 36, 0.3)',
   },
   venue: {
     fontFamily: CinemaFonts.sign,
