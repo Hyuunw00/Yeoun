@@ -17,7 +17,7 @@ import {
   type WorkInput,
 } from '@/lib/db';
 import { clearDraft, loadDraft, saveDraft } from '@/lib/draft';
-import { deletePhotoFiles, maxPhotos, persistPhoto, photoUri, pickPhotos } from '@/lib/photos';
+import { deletePhotoFiles, maxPhotos, persistPhoto, photoUri, pickPhotoAssets, resizePhotos } from '@/lib/photos';
 
 const DRAFT_SAVE_DELAY_MS = 500;
 
@@ -77,6 +77,8 @@ export function useRecordEditor({
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [picking, setPicking] = useState(false);
+  // Photos resized so far out of those just picked; null when not resizing
+  const [pickProgress, setPickProgress] = useState<{ done: number; total: number } | null>(null);
   const [saving, setSaving] = useState(false);
   // Guards against a double tap inserting the record twice before re-render
   const savingRef = useRef(false);
@@ -213,12 +215,19 @@ export function useRecordEditor({
   async function addPhotos() {
     setPicking(true);
     try {
-      const picked = await pickPhotos(photoLimit - photos.length);
-      setPhotos((prev) => [...prev, ...picked.map((uri) => ({ uri }))].slice(0, photoLimit));
+      const assets = await pickPhotoAssets(photoLimit - photos.length);
+      if (assets.length === 0) return;
+      setPickProgress({ done: 0, total: assets.length });
+      // Each photo appears as soon as it's ready instead of after the whole batch
+      await resizePhotos(assets, (uris, done) => {
+        if (uris.length) setPhotos((prev) => [...prev, ...uris.map((uri) => ({ uri }))].slice(0, photoLimit));
+        setPickProgress({ done, total: assets.length });
+      });
     } catch {
       Alert.alert('사진을 불러오지 못했어요');
     } finally {
       setPicking(false);
+      setPickProgress(null);
     }
   }
 
@@ -275,6 +284,7 @@ export function useRecordEditor({
     addPhotos,
     removePhoto,
     picking,
+    pickProgress,
     saving,
     canSave,
     save,

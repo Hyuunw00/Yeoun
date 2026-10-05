@@ -171,6 +171,7 @@ export default function BookWriteScreen() {
               <PhotoPickerRow
                 photos={editor.photos}
                 picking={editor.picking}
+                progress={editor.pickProgress}
                 onAdd={editor.addPhotos}
                 onRemove={editor.removePhoto}
                 fontFamily={LibraryFonts.serif}

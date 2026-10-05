@@ -32,27 +32,53 @@ export function photoUri(fileName: string) {
   return photoFile(fileName).uri;
 }
 
-// Picks photos and returns resized temporary copies (not yet persisted)
-export async function pickPhotos(limit: number) {
+// Full-size photos are decoded at once in memory, so only a few are resized together
+const RESIZE_CONCURRENCY = 3;
+
+export async function pickPhotoAssets(limit: number) {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsMultipleSelection: true,
     selectionLimit: limit,
     quality: 1,
   });
-  if (result.canceled) return [];
+  return result.canceled ? [] : result.assets.slice(0, limit);
+}
 
-  return Promise.all(
-    result.assets.slice(0, limit).map(async (asset) => {
-      const context = ImageManipulator.manipulate(asset.uri);
-      if (Math.max(asset.width, asset.height) > MAX_DIMENSION) {
-        context.resize(asset.width >= asset.height ? { width: MAX_DIMENSION } : { height: MAX_DIMENSION });
-      }
-      const image = await context.renderAsync();
-      const saved = await image.saveAsync({ compress: JPEG_QUALITY, format: SaveFormat.JPEG });
-      return saved.uri;
-    }),
-  );
+// A resized temporary copy (not yet persisted)
+export async function resizePhotoFile(uri: string, width: number, height: number) {
+  const context = ImageManipulator.manipulate(uri);
+  if (Math.max(width, height) > MAX_DIMENSION) {
+    context.resize(width >= height ? { width: MAX_DIMENSION } : { height: MAX_DIMENSION });
+  }
+  const image = await context.renderAsync();
+  const saved = await image.saveAsync({ compress: JPEG_QUALITY, format: SaveFormat.JPEG });
+  return saved.uri;
+}
+
+const resizePhoto = (asset: ImagePicker.ImagePickerAsset) => resizePhotoFile(asset.uri, asset.width, asset.height);
+
+// Resizes picked photos a few at a time. `onReady` gets each one as soon as it and every
+// photo picked before it are done, so they show up in the order they were picked.
+export async function resizePhotos(
+  assets: ImagePicker.ImagePickerAsset[],
+  onReady: (uris: string[], done: number) => void,
+) {
+  const ready: string[] = [];
+  let next = 0;
+  let shown = 0;
+  let done = 0;
+  async function worker() {
+    while (next < assets.length) {
+      const index = next++;
+      ready[index] = await resizePhoto(assets[index]);
+      done++;
+      const batch: string[] = [];
+      while (ready[shown]) batch.push(ready[shown++]);
+      onReady(batch, done);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(RESIZE_CONCURRENCY, assets.length) }, worker));
 }
 
 // Copies a temporary photo into permanent storage and returns its file name.

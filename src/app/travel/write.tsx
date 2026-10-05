@@ -219,6 +219,7 @@ export default function TravelWriteScreen() {
               <PhotoPickerRow
                 photos={editor.photos}
                 picking={editor.picking}
+                progress={editor.pickProgress}
                 onAdd={editor.addPhotos}
                 onRemove={editor.removePhoto}
                 limit={editor.photoLimit}

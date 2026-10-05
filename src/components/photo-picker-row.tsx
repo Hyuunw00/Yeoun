@@ -7,6 +7,8 @@ import type { PhotoItem } from '@/lib/use-record-editor';
 type Props = {
   photos: PhotoItem[];
   picking: boolean;
+  // Photos resized so far while adding several at once
+  progress?: { done: number; total: number } | null;
   onAdd: () => void;
   onRemove: (index: number) => void;
   limit?: number;
@@ -14,11 +16,13 @@ type Props = {
   fontFamily: string;
 };
 
-// Thumbnails of attached photos with remove badges, plus an add tile up to the limit.
-// Scrolls sideways once a trip's worth of photos no longer fits the width.
+// An add tile up to the limit, then thumbnails of attached photos with remove badges.
+// Scrolls sideways once a trip's worth of photos no longer fits the width; the add tile
+// leads so it (and its progress while photos are being prepared) stays in view.
 export function PhotoPickerRow({
   photos,
   picking,
+  progress,
   onAdd,
   onRemove,
   colors,
@@ -31,6 +35,25 @@ export function PhotoPickerRow({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.row}
       style={styles.scroll}>
+      {photos.length < limit && (
+        <Pressable style={[styles.photo, styles.add, { borderColor: colors.border }]} onPress={onAdd} disabled={picking}>
+          {picking ? (
+            <>
+              <ActivityIndicator color={colors.text} />
+              {!!progress && (
+                <Text style={[styles.progress, { color: colors.text, fontFamily }]}>
+                  {progress.done}/{progress.total}
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={[styles.addText, { color: colors.text, fontFamily }]}>
+              사진{'\n'}
+              {photos.length}/{limit}
+            </Text>
+          )}
+        </Pressable>
+      )}
       {photos.map((photo, index) => (
         <View key={photo.uri} style={styles.photo}>
           <Image source={photo.uri} style={styles.image} contentFit="cover" />
@@ -42,18 +65,6 @@ export function PhotoPickerRow({
           </Pressable>
         </View>
       ))}
-      {photos.length < limit && (
-        <Pressable style={[styles.photo, styles.add, { borderColor: colors.border }]} onPress={onAdd} disabled={picking}>
-          {picking ? (
-            <ActivityIndicator color={colors.text} />
-          ) : (
-            <Text style={[styles.addText, { color: colors.text, fontFamily }]}>
-              사진{'\n'}
-              {photos.length}/{limit}
-            </Text>
-          )}
-        </Pressable>
-      )}
     </ScrollView>
   );
 }
@@ -98,6 +109,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderStyle: 'dashed',
+  },
+  progress: {
+    marginTop: 4,
+    fontSize: 10,
   },
   addText: {
     textAlign: 'center',
