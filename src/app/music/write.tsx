@@ -164,7 +164,7 @@ export default function MusicWriteScreen() {
                   themeVariant="dark"
                   accentColor={RecordColors.neon}
                   maximumDate={new Date()}
-                  onValueChange={(_, date) => editor.setExperiencedOn(toDateString(date))}
+                  onChange={(_, date) => date && editor.setExperiencedOn(toDateString(date))}
                 />
               </View>
 

@@ -154,7 +154,7 @@ export default function BookWriteScreen() {
                   themeVariant="light"
                   accentColor={LibraryColors.pencil}
                   maximumDate={new Date()}
-                  onValueChange={(_, date) => editor.setExperiencedOn(toDateString(date))}
+                  onChange={(_, date) => date && editor.setExperiencedOn(toDateString(date))}
                 />
               </View>
 

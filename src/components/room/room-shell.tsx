@@ -20,9 +20,9 @@ import { RoomColors, SPINE_COLORS } from './theme';
 export const SHELL_BLEED = 24;
 
 function polygon(points: Point[]): SkPath {
-  const builder = Skia.PathBuilder.Make().moveTo(points[0].x, points[0].y);
+  const builder = Skia.Path.Make().moveTo(points[0].x, points[0].y);
   for (const p of points.slice(1)) builder.lineTo(p.x, p.y);
-  return builder.close().detach();
+  return builder.close();
 }
 
 // Bookshelf against the right wall, spanning two depths
@@ -88,7 +88,7 @@ export function RoomShell({ room }: { room: Room }) {
     const bl = project(0, height, BACK_SCALE);
 
     // Floor planks: lines from the back edge out to the front, converging on the vanishing point
-    const planks = Skia.PathBuilder.Make();
+    const planks = Skia.Path.Make();
     for (let x = -width; x <= width * 2; x += width / 7) {
       const from = project(x, height, BACK_SCALE);
       planks.moveTo(from.x, from.y).lineTo(x, height + b);
@@ -99,7 +99,7 @@ export function RoomShell({ room }: { room: Room }) {
       floor: polygon([bl, br, { x: width + b, y: height + b }, { x: -b, y: height + b }]),
       left: polygon([{ x: -b, y: -b }, tl, bl, { x: -b, y: height + b }]),
       right: polygon([tr, { x: width + b, y: -b }, { x: width + b, y: height + b }, br]),
-      planks: planks.detach(),
+      planks,
       floorCenter: project(width / 2, height, 0.72),
     };
   }, [width, height, project, b]);

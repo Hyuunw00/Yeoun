@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { Asset, requestPermissionsAsync } from 'expo-media-library';
+import { getAssetInfoAsync, requestPermissionsAsync } from 'expo-media-library';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
@@ -52,8 +52,8 @@ type Candidate = {
 type Phase =
   { step: 'intro' } | { step: 'scanning'; label: string } | { step: 'review' } | { step: 'importing'; label: string };
 
-// Asset ids on iOS are already "ph://<localIdentifier>" URIs, which expo-image loads directly
-const photoSource = (id: string) => ({ uri: id });
+// Asset ids on iOS are Photos local identifiers; expo-image loads them as "ph://" URIs
+const photoSource = (id: string) => ({ uri: `ph://${id}` });
 const cityLine = (city: City | null) => [city?.region, city?.country].filter(Boolean).join(' · ');
 
 // Bringing in past trips from the photo library: photos taken away from home are grouped
@@ -129,9 +129,8 @@ export default function ImportTripsScreen() {
         const ids = c.trip.photoIds.filter((id) => c.selected.includes(id));
         for (const [j, id] of ids.entries()) {
           setPhase({ step: 'importing', label: `${c.name} 가져오는 중 · 사진 ${j + 1} / ${ids.length}` });
-          const asset = new Asset(id);
-          const [uri, shape] = await Promise.all([asset.getUri(), asset.getShape()]);
-          const temp = await resizePhotoFile(uri, shape?.width ?? 0, shape?.height ?? 0);
+          const info = await getAssetInfoAsync(id);
+          const temp = await resizePhotoFile(info.localUri ?? info.uri, info.width, info.height);
           photoNames.push(await persistPhoto(temp));
         }
         setPhase({ step: 'importing', label: `${c.name} 저장하는 중 (${i + 1} / ${picked.length})` });

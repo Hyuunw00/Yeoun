@@ -6,14 +6,14 @@ const SEGMENT = 10;
 
 // A slightly wobbly, slightly sloped line like one drawn by hand with a pencil
 function handDrawnLine(x: number, y: number, width: number, seed: number) {
-  const builder = Skia.PathBuilder.Make().moveTo(x - 2, y);
+  const builder = Skia.Path.Make().moveTo(x - 2, y);
   const steps = Math.max(2, Math.ceil(width / SEGMENT));
   for (let i = 1; i <= steps; i++) {
     const t = i / steps;
     const wobble = Math.sin(i * 1.7 + seed * 3.1) * 0.7;
     builder.lineTo(x - 2 + (width + 4) * t, y + wobble + t * 1.2);
   }
-  return builder.detach();
+  return builder;
 }
 
 // Text with a pencil line drawn under every rendered line of it
@@ -21,12 +21,12 @@ export function PencilUnderline({ children, style }: { children: ReactNode; styl
   const [lines, setLines] = useState<TextLayoutLine[]>([]);
 
   const path = useMemo(() => {
-    const combined = Skia.PathBuilder.Make();
+    const combined = Skia.Path.Make();
     lines.forEach((line, i) => {
       if (line.width < 1) return;
       combined.addPath(handDrawnLine(line.x, line.y + line.height - 3, line.width, i));
     });
-    return combined.detach();
+    return combined;
   }, [lines]);
 
   return (
