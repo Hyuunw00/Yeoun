@@ -5,8 +5,8 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TextIn
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CinemaFonts } from '@/components/cinema/theme';
-import { PaperGrain } from '@/components/library/paper-grain';
 import { LibraryFonts } from '@/components/library/theme';
+import { MapPaper } from '@/components/travel/map-paper';
 import { MapColors } from '@/components/travel/theme';
 import { useDb } from '@/lib/database';
 import { countTripsWithoutOrigin, fillMissingOrigins } from '@/lib/db';
@@ -107,7 +107,7 @@ export default function TravelSearchScreen() {
 
   return (
     <View style={styles.container}>
-      <PaperGrain opacity={0.14} />
+      <MapPaper />
       <SafeAreaView style={styles.flex}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>

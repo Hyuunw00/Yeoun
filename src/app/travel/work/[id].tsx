@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -14,13 +14,23 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { CinemaFonts } from '@/components/cinema/theme';
-import { PaperGrain } from '@/components/library/paper-grain';
-import { Polaroids } from '@/components/library/polaroids';
 import { LibraryFonts } from '@/components/library/theme';
+import { MapPaper } from '@/components/travel/map-paper';
+import { Postcard } from '@/components/travel/postcard';
+import { Snapshots } from '@/components/travel/snapshots';
 import { MapColors } from '@/components/travel/theme';
 import { asTransport } from '@/components/travel/transport';
 import { TripTicket } from '@/components/travel/trip-ticket';
@@ -32,24 +42,56 @@ import { photoUri } from '@/lib/photos';
 import type { City } from '@/lib/places';
 
 const formatDate = (date: string) => date.replaceAll('-', '.');
+const NOTE_MAX = 60;
+const firstLine = (text: string) => {
+  const line = text.trim().split('\n')[0];
+  return line.length > NOTE_MAX ? `${line.slice(0, NOTE_MAX)}…` : line;
+};
 
 // Passport stamp inks and tilts, cycled per visit
 const STAMP_INKS = ['#a3241c', '#2f4f7a', '#3e6b45', '#6b3f7a'];
 const STAMP_TILTS = ['-8deg', '5deg', '-3deg', '9deg'];
+// Stamps are struck one after another once the page has settled
+const STAMP_FIRST_DELAY_MS = 450;
+const STAMP_GAP_MS = 220;
+const STAMP_STRIKE_MS = 170;
+// Only the first few strikes tap the phone
+const MAX_STAMP_TAPS = 6;
 const COVER_COLUMNS = 3;
 const COVER_GAP = 6;
 
+function strikeTap() {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+}
+
+// Pressed down from above: it lands bigger and faint, then sits flat at full ink
 function Stamp({ code, name, date, index }: { code: string; name: string; date: string; index: number }) {
   const ink = STAMP_INKS[index % STAMP_INKS.length];
+  const tilt = STAMP_TILTS[index % STAMP_TILTS.length];
+  const pressed = useSharedValue(0);
+  useEffect(() => {
+    const taps = index < MAX_STAMP_TAPS;
+    pressed.set(
+      withDelay(
+        STAMP_FIRST_DELAY_MS + index * STAMP_GAP_MS,
+        withTiming(1, { duration: STAMP_STRIKE_MS, easing: Easing.in(Easing.quad) }, (finished) => {
+          if (finished && taps) scheduleOnRN(strikeTap);
+        }),
+      ),
+    );
+  }, [pressed, index]);
+  const strike = useAnimatedStyle(() => ({
+    opacity: 0.85 * pressed.get(),
+    transform: [{ scale: 1.7 - 0.7 * pressed.get() }, { rotate: tilt }],
+  }));
   return (
-    <View
-      style={[styles.stamp, { borderColor: ink, transform: [{ rotate: STAMP_TILTS[index % STAMP_TILTS.length] }] }]}>
+    <Animated.View style={[styles.stamp, { borderColor: ink }, strike]}>
       <Text style={[styles.stampCode, { color: ink }]}>{code}</Text>
       <Text style={[styles.stampName, { color: ink }]} numberOfLines={1}>
         {name}
       </Text>
       <Text style={[styles.stampDate, { color: ink }]}>{formatDate(date)}</Text>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -139,11 +181,16 @@ export default function CityScreen() {
   // The chosen photo, unless its record was deleted; otherwise the latest trip's first photo
   const cover = work?.coverPhoto && allPhotos.includes(work.coverPhoto) ? work.coverPhoto : (allPhotos[0] ?? null);
   const code = work?.countryCode ?? '';
+  // The back of the card: the latest trip's remembered scene, else its first line
+  const latestNoted = [...records].reverse().find((r) => r.moment || r.body.trim());
+  const postcardNote = latestNoted
+    ? { text: latestNoted.moment ?? firstLine(latestNoted.body), date: latestNoted.experiencedOn }
+    : null;
   const tile = (width - 40 - COVER_GAP * (COVER_COLUMNS - 1)) / COVER_COLUMNS;
 
   return (
     <View style={styles.container}>
-      <PaperGrain opacity={0.14} />
+      <MapPaper />
       <SafeAreaView style={styles.flex} edges={['top']}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={12}>
@@ -158,28 +205,23 @@ export default function CityScreen() {
           ListHeaderComponent={
             work && (
               <Animated.View entering={FadeIn.duration(600)} style={styles.top}>
-                <Pressable
-                  style={styles.postcard}
-                  onPress={() => allPhotos.length > 0 && setChoosingCover(true)}
-                  disabled={allPhotos.length === 0}>
-                  {cover ? (
-                    <Image source={photoUri(cover)} style={StyleSheet.absoluteFill} contentFit="cover" />
-                  ) : (
-                    <View style={[StyleSheet.absoluteFill, styles.blankFront]} />
-                  )}
-                  <View style={styles.greeting}>
-                    <Text style={[styles.greetingSmall, !cover && styles.onPaper]}>Greetings from</Text>
-                    <Text
-                      style={[styles.greetingName, !cover && styles.onPaper]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit>
-                      {work.title}
-                    </Text>
-                  </View>
-                </Pressable>
+                <Postcard
+                  city={work.title}
+                  cover={cover}
+                  note={postcardNote?.text ?? null}
+                  postedOn={postcardNote?.date ?? null}
+                  countryCode={code}
+                />
                 <View style={styles.underCard}>
                   {!!work.subtitle && <Text style={styles.subtitle}>{work.subtitle}</Text>}
-                  {allPhotos.length > 0 && <Text style={styles.coverHint}>엽서를 누르면 사진을 바꿀 수 있어요</Text>}
+                  <View style={styles.cardActions}>
+                    <Text style={styles.coverHint}>엽서를 누르면 뒷면을 볼 수 있어요</Text>
+                    {allPhotos.length > 0 && (
+                      <Pressable onPress={() => setChoosingCover(true)} hitSlop={10}>
+                        <Text style={styles.changeCover}>사진 바꾸기</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
 
                 {records.length > 0 && (
@@ -206,8 +248,9 @@ export default function CityScreen() {
                   dates={formatTripDates(item.experiencedOn, item.endedOn)}
                   length={tripLength(item.experiencedOn, item.endedOn)}>
                   <Text style={styles.visit}>{index + 1}번째 방문</Text>
+                  {!!item.moment && <Text style={styles.moment}>“{item.moment}”</Text>}
                   {!!item.body && <Text style={styles.body}>{item.body}</Text>}
-                  {item.photos.length > 0 && <Polaroids photos={item.photos} />}
+                  {item.photos.length > 0 && <Snapshots photos={item.photos} />}
                 </TripTicket>
               </Pressable>
             </Animated.View>
@@ -282,47 +325,6 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 24,
   },
-  postcard: {
-    aspectRatio: 3 / 2,
-    overflow: 'hidden',
-    borderWidth: 8,
-    borderColor: MapColors.paper,
-    backgroundColor: MapColors.paper,
-    transform: [{ rotate: '-1.5deg' }],
-    shadowColor: '#3b2c1e',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  blankFront: {
-    backgroundColor: MapColors.land,
-  },
-  greeting: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 12,
-  },
-  greetingSmall: {
-    fontFamily: LibraryFonts.pen,
-    fontSize: 22,
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.55)',
-    textShadowRadius: 6,
-    textShadowOffset: { width: 0, height: 1 },
-  },
-  greetingName: {
-    fontFamily: LibraryFonts.serifBold,
-    fontSize: 40,
-    color: '#fff',
-    textShadowColor: 'rgba(0, 0, 0, 0.55)',
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 2 },
-  },
-  onPaper: {
-    color: MapColors.ink,
-    textShadowColor: 'transparent',
-  },
   underCard: {
     marginTop: 6,
     gap: 4,
@@ -331,6 +333,16 @@ const styles = StyleSheet.create({
     fontFamily: LibraryFonts.serif,
     fontSize: 13,
     color: MapColors.inkDim,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  changeCover: {
+    fontFamily: LibraryFonts.serifBold,
+    fontSize: 12,
+    color: MapColors.pin,
   },
   coverHint: {
     fontFamily: LibraryFonts.serif,
@@ -383,6 +395,12 @@ const styles = StyleSheet.create({
     fontFamily: LibraryFonts.serif,
     fontSize: 12,
     color: MapColors.inkDim,
+  },
+  moment: {
+    fontFamily: LibraryFonts.pen,
+    fontSize: 24,
+    lineHeight: 30,
+    color: MapColors.pin,
   },
   body: {
     fontFamily: LibraryFonts.pen,
