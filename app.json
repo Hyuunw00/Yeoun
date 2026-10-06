@@ -54,7 +54,8 @@
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

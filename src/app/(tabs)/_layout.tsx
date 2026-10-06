@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { Tabs } from 'expo-router/js-tabs';
+import { Tabs } from 'expo-router';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
 import type { ColorValue } from 'react-native';
 

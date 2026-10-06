@@ -41,15 +41,15 @@ export function arcFor(transport: Transport | null) {
 
 // Routes grouped into one path per transport (and one for trips without one)
 export function routeLayers(routes: { transport: Transport | null; curve: Curve }[]) {
-  const groups = new Map<Transport | null, ReturnType<typeof Skia.PathBuilder.Make>>();
+  const groups = new Map<Transport | null, SkPath>();
   for (const { transport, curve: c } of routes) {
-    const builder = groups.get(transport) ?? Skia.PathBuilder.Make();
+    const builder = groups.get(transport) ?? Skia.Path.Make();
     builder.moveTo(c.x1, c.y1).quadTo(c.cx, c.cy, c.x2, c.y2);
     groups.set(transport, builder);
   }
   return [...TRANSPORT_ORDER, null]
     .filter((t) => groups.has(t))
-    .map((t) => ({ key: t ?? 'none', path: groups.get(t)!.detach(), dash: t ? TRANSPORTS[t].dash : DEFAULT_DASH }));
+    .map((t) => ({ key: t ?? 'none', path: groups.get(t)!, dash: t ? TRANSPORTS[t].dash : DEFAULT_DASH }));
 }
 
 export function Pin({

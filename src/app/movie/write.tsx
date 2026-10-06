@@ -171,7 +171,7 @@ export default function MovieWriteScreen() {
                       themeVariant="dark"
                       accentColor={CinemaColors.brass}
                       maximumDate={new Date()}
-                      onValueChange={(_, date) => setExperiencedOn(toDateString(date))}
+                      onChange={(_, date) => date && setExperiencedOn(toDateString(date))}
                     />
                   </View>
                 </View>

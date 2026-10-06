@@ -37,13 +37,12 @@ export function ProjectionScreen({ rect, imageUrl }: { rect: Rect; imageUrl: str
 export function LightBeam({ from, screen, width, height }: { from: Point; screen: Rect; width: number; height: number }) {
   const path = useMemo(
     () =>
-      Skia.PathBuilder.Make()
+      Skia.Path.Make()
         .moveTo(from.x - 3, from.y)
         .lineTo(screen.x, screen.y)
         .lineTo(screen.x + screen.width, screen.y)
         .lineTo(from.x + 3, from.y)
-        .close()
-        .detach(),
+        .close(),
     [from.x, from.y, screen.x, screen.y, screen.width],
   );
 

@@ -58,18 +58,18 @@ export function Vinyl({ size, artworkUrl, spinning = false, single = false }: Pr
 
   const { grooves, gaps, grooveBand } = useMemo(() => {
     const step = Math.max(1.1, size / 260);
-    const groovePath = Skia.PathBuilder.Make();
+    const groovePath = Skia.Path.Make();
     for (let rr = r * GROOVE_START; rr < r * GROOVE_END; rr += step) {
       groovePath.addCircle(r, r, rr);
     }
-    const gapPath = Skia.PathBuilder.Make();
+    const gapPath = Skia.Path.Make();
     for (const g of TRACK_GAPS) gapPath.addCircle(r, r, r * g);
     // The grooved ring between the label and the rim, where reflections show
-    const band = Skia.PathBuilder.Make()
+    const band = Skia.Path.Make()
       .addCircle(r, r, r * GROOVE_END)
       .addCircle(r, r, r * GROOVE_START)
       .setFillType(FillType.EvenOdd);
-    return { grooves: groovePath.detach(), gaps: gapPath.detach(), grooveBand: band.detach() };
+    return { grooves: groovePath, gaps: gapPath, grooveBand: band };
   }, [r, size]);
 
   const label = size * LABEL_RATIO;

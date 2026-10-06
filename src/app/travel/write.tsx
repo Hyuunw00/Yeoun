@@ -202,7 +202,8 @@ export default function TravelWriteScreen() {
                     themeVariant="light"
                     accentColor={MapColors.pin}
                     maximumDate={new Date()}
-                    onValueChange={(_, date) => {
+                    onChange={(_, date) => {
+                      if (!date) return;
                       const start = toDateString(date);
                       editor.setExperiencedOn(start);
                       // Keep the arrival from falling before a later departure
@@ -223,7 +224,7 @@ export default function TravelWriteScreen() {
                         accentColor={MapColors.pin}
                         minimumDate={editor.pickerDate}
                         maximumDate={new Date()}
-                        onValueChange={(_, date) => editor.setEndedOn(toDateString(date))}
+                        onChange={(_, date) => date && editor.setEndedOn(toDateString(date))}
                       />
                       <Pressable onPress={() => editor.setEndedOn(null)} hitSlop={10}>
                         <Text style={styles.clear}>지우기</Text>

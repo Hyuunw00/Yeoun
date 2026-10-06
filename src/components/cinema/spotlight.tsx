@@ -21,13 +21,12 @@ export function Spotlight({ width, height }: Props) {
   const center = canvasWidth / 2;
 
   const cone = useMemo(() => {
-    return Skia.PathBuilder.Make()
+    return Skia.Path.Make()
       .moveTo(center - LAMP_WIDTH / 2, LAMP_HEIGHT)
       .lineTo(center + LAMP_WIDTH / 2, LAMP_HEIGHT)
       .lineTo(canvasWidth, height)
       .lineTo(0, height)
-      .close()
-      .detach();
+      .close();
   }, [center, canvasWidth, height]);
 
   return (

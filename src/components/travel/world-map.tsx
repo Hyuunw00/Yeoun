@@ -41,7 +41,7 @@ type Props = {
 
 function graticule(): SkPath {
   const { width, height, unitsPerDegree, top } = WORLD.meta;
-  const builder = Skia.PathBuilder.Make();
+  const builder = Skia.Path.Make();
   for (let lon = -180; lon <= 180; lon += GRID_STEP_DEGREES) {
     const x = (lon + 180) * unitsPerDegree;
     builder.moveTo(x, 0).lineTo(x, height);
@@ -50,7 +50,7 @@ function graticule(): SkPath {
     const y = (top - lat) * unitsPerDegree;
     builder.moveTo(0, y).lineTo(width, y);
   }
-  return builder.detach();
+  return builder;
 }
 
 // An old paper world map drawn with Skia: countries with a visited city are inked in,

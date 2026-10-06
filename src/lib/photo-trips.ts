@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import { AssetField, MediaType, Query, Asset } from 'expo-media-library';
+import { getAssetInfoAsync, getAssetsAsync, MediaType, SortBy } from 'expo-media-library';
 
 import { toDateString } from '@/lib/date';
 import { cityFromAddress, type City } from '@/lib/places';
@@ -102,21 +102,25 @@ async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Prom
 export async function scanPhotos(years: number | null, onProgress: (done: number, total: number) => void) {
   const since = years ? Date.now() - years * YEAR_MS : 0;
   const metadata = [];
-  for (let offset = 0; ; offset += PAGE) {
-    const page = await new Query()
-      .eq(AssetField.MEDIA_TYPE, MediaType.IMAGE)
-      .gte(AssetField.CREATION_TIME, since)
-      .orderBy({ key: AssetField.CREATION_TIME, ascending: true })
-      .limit(PAGE)
-      .offset(offset)
-      .exeForMetadata();
-    metadata.push(...page);
-    if (page.length < PAGE) break;
+  for (let after: string | undefined; ; ) {
+    const page = await getAssetsAsync({
+      mediaType: MediaType.photo,
+      createdAfter: since,
+      sortBy: [[SortBy.creationTime, true]],
+      first: PAGE,
+      after,
+    });
+    metadata.push(...page.assets);
+    if (!page.hasNextPage) break;
+    after = page.endCursor;
   }
 
   let done = 0;
   const located = await mapLimited(metadata, LOCATION_CONCURRENCY, async (m) => {
-    const location = m.creationTime ? await new Asset(m.id).getLocation().catch(() => null) : null;
+    const info = m.creationTime
+      ? await getAssetInfoAsync(m.id, { shouldDownloadFromNetwork: false }).catch(() => null)
+      : null;
+    const location = info?.location ?? null;
     done++;
     if (done % 50 === 0 || done === metadata.length) onProgress(done, metadata.length);
     return location && m.creationTime
