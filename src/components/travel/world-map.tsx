@@ -14,6 +14,7 @@ import {
   svgPath,
   type MapPin,
   type MapRoute,
+  useReveal,
 } from './map-parts';
 import { MapColors } from './theme';
 import { useMapGestures } from './use-map-gestures';
@@ -88,6 +89,7 @@ export function WorldMap({ width, height, pins, visitedCodes, selectedId, onSele
   const start = focus
     ? { ...project(focus.latitude, focus.longitude), scale: fitHeight * 1.6 }
     : { x: mapWidth / 2, y: mapHeight / 2, scale: minScale };
+  const reveal = useReveal();
   const { gesture, transform, scale } = useMapGestures({
     width,
     height,
@@ -118,15 +120,26 @@ export function WorldMap({ width, height, pins, visitedCodes, selectedId, onSele
   const drawRoutes = (offset: number) => (
     <Group key={offset} transform={[{ translateX: offset }]}>
       {layers.map((layer) => (
-        <RouteLayer key={layer.key} path={layer.path} dash={layer.dash} scale={scale} />
+        <RouteLayer key={layer.key} path={layer.path} dash={layer.dash} scale={scale} reveal={reveal} />
       ))}
     </Group>
   );
   const drawMarkers = (offset: number) => (
     <Group key={offset} transform={[{ translateX: offset }]}>
       {homePoint && <HomeMarker x={homePoint.x} y={homePoint.y} scale={scale} />}
-      {points.map((p) => (
-        <Pin key={p.id} x={p.x} y={p.y} scale={scale} selected={p.id === selectedId} />
+      {points.map((p, i) => (
+        <Pin
+          key={p.id}
+          x={p.x}
+          y={p.y}
+          scale={scale}
+          selected={p.id === selectedId}
+          reveal={reveal}
+          // Pins come latest first; the oldest drops first
+          order={points.length - 1 - i}
+          count={points.length}
+          haptic={offset === 0}
+        />
       ))}
     </Group>
   );

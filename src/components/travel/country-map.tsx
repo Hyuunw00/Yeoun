@@ -15,6 +15,7 @@ import {
   svgPath,
   type MapPin,
   type MapRoute,
+  useReveal,
 } from './map-parts';
 import { MapColors } from './theme';
 import { useMapGestures } from './use-map-gestures';
@@ -72,6 +73,7 @@ export function CountryMap({ country, width, height, pins, selectedId, onSelect,
   );
   const homePoint = useMemo(() => (home ? projectIn(country, home.latitude, home.longitude) : null), [country, home]);
 
+  const reveal = useReveal();
   const { gesture, transform, scale } = useMapGestures({
     width,
     height,
@@ -104,11 +106,22 @@ export function CountryMap({ country, width, height, pins, selectedId, onSelect,
               ))}
               <Path path={land} color={MapColors.coast} style="stroke" strokeWidth={coastWidth} />
               {layers.map((layer) => (
-                <RouteLayer key={layer.key} path={layer.path} dash={layer.dash} scale={scale} />
+                <RouteLayer key={layer.key} path={layer.path} dash={layer.dash} scale={scale} reveal={reveal} />
               ))}
               {homePoint && <HomeMarker x={homePoint.x} y={homePoint.y} scale={scale} />}
-              {points.map((p) => (
-                <Pin key={p.id} x={p.x} y={p.y} scale={scale} selected={p.id === selectedId} />
+              {points.map((p, i) => (
+                <Pin
+                  key={p.id}
+                  x={p.x}
+                  y={p.y}
+                  scale={scale}
+                  selected={p.id === selectedId}
+                  reveal={reveal}
+                  // Pins come latest first; the oldest drops first
+                  order={points.length - 1 - i}
+                  count={points.length}
+                  haptic
+                />
               ))}
             </Group>
             <PaperFibers />
