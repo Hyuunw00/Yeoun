@@ -16,9 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AutoGrowInput } from '@/components/auto-grow-input';
-import { PaperGrain } from '@/components/library/paper-grain';
 import { LibraryFonts } from '@/components/library/theme';
 import { PhotoPickerRow } from '@/components/photo-picker-row';
+import { MapPaper } from '@/components/travel/map-paper';
 import { MapColors } from '@/components/travel/theme';
 import { asTransport, TRANSPORT_ORDER, TRANSPORTS } from '@/components/travel/transport';
 import { TripTicket } from '@/components/travel/trip-ticket';
@@ -28,6 +28,9 @@ import type { City } from '@/lib/places';
 import { useRecordEditor } from '@/lib/use-record-editor';
 
 const cityLine = (region: string | null, country: string | null) => [region, country].filter(Boolean).join(' · ');
+
+// A line that fits on the back of a postcard
+const MOMENT_MAX = 60;
 
 // Writing up a trip: the ticket at the top fills in as the transport and dates are picked
 export default function TravelWriteScreen() {
@@ -112,7 +115,7 @@ export default function TravelWriteScreen() {
 
   return (
     <View style={styles.container}>
-      <PaperGrain opacity={0.14} />
+      <MapPaper />
       <SafeAreaView style={styles.flex}>
         <KeyboardAvoidingView style={styles.flex} behavior="padding">
           <View style={styles.header}>
@@ -240,6 +243,20 @@ export default function TravelWriteScreen() {
                     </Pressable>
                   )}
                 </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.label}>남은 장면</Text>
+                <TextInput
+                  style={styles.moment}
+                  value={editor.moment}
+                  onChangeText={editor.setMoment}
+                  placeholder="골목의 빵 냄새, 마지막 날의 노을… (선택)"
+                  placeholderTextColor={MapColors.inkDim}
+                  selectionColor={MapColors.pin}
+                  maxLength={MOMENT_MAX}
+                />
+                <Text style={styles.momentHint}>엽서 뒷면에 손글씨로 남아요</Text>
               </View>
 
               <PhotoPickerRow
@@ -397,6 +414,21 @@ const styles = StyleSheet.create({
   clear: {
     fontFamily: LibraryFonts.serif,
     fontSize: 12,
+    color: MapColors.inkDim,
+  },
+  // Handwritten, as it will read on the back of the postcard
+  moment: {
+    height: 40,
+    paddingVertical: 0,
+    fontFamily: LibraryFonts.pen,
+    fontSize: 24,
+    color: MapColors.ink,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: MapColors.coast,
+  },
+  momentHint: {
+    fontFamily: LibraryFonts.serif,
+    fontSize: 11,
     color: MapColors.inkDim,
   },
   // Explicit lineHeight so AutoGrowInput can size it exactly
